@@ -1,0 +1,46 @@
+# POI类型配置: 博物馆
+# 大类: museum
+# 说明: 各类博物馆的专有数据源配置
+
+poi_category:
+  name: "博物馆"
+  description: "各类博物馆"
+  call_map_vendors: true
+
+sources:
+  # 官方渠道
+  - name: "国家文物局-博物馆"
+    type: "official"
+    url: "https://www.ncha.gov.cn/"
+    weight: 1.0
+    description: "全国博物馆名录"
+    update_frequency: "年度"
+
+  - name: "中国博物馆协会"
+    type: "official"
+    url: "http://www.chinamuseum.org.cn/"
+    weight: 0.95
+    description: "博物馆等级评定信息"
+    update_frequency: "年度"
+
+  - name: "国家博物馆"
+    type: "official"
+    url: "https://www.chnmuseum.cn/"
+    weight: 0.95
+    description: "国家一级博物馆信息"
+    update_frequency: "实时"
+
+  # 互联网专有源
+  - name: "百度百科-博物馆"
+    type: "internet"
+    url: "https://baike.baidu.com/"
+    weight: 0.65
+    description: "博物馆百科词条"
+    update_frequency: "不定期"
+
+  - name: "豆瓣同城-博物馆"
+    type: "internet"
+    url: "https://www.douban.com/location/"
+    weight: 0.55
+    description: "博物馆活动信息"
+    update_frequency: "周度"

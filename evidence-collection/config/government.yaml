@@ -1,0 +1,68 @@
+# POI类型配置: 政府机关
+# 大类: government
+# 说明: 国家级、省直辖市级、地市级、区县级政府机关的专有数据源配置
+
+poi_category:
+  name: "政府机关"
+  description: "国家级、省直辖市级、地市级、区县级政府机关"
+  call_map_vendors: true
+
+sources:
+  # 官方渠道
+  - name: "中国政府网"
+    type: "official"
+    url: "https://www.gov.cn/"
+    weight: 1.0
+    description: "国务院及各级政府门户网站"
+    update_frequency: "实时"
+
+  - name: "国家政务服务平台"
+    type: "official"
+    url: "https://www.gjzwfw.gov.cn/"
+    weight: 1.0
+    description: "全国一体化政务服务平台"
+    update_frequency: "实时"
+
+  - name: "民政部"
+    type: "official"
+    url: "https://www.mca.gov.cn/"
+    api_endpoint: "https://www.mca.gov.cn/n152/n165/n178/"
+    weight: 0.95
+    description: "行政区划和政府机关信息"
+    update_frequency: "年度"
+
+  - name: "国家公务员局"
+    type: "official"
+    url: "http://www.scs.gov.cn/"
+    weight: 0.9
+    description: "政府机构设置信息"
+    update_frequency: "年度"
+
+  - name: "各省人民政府"
+    type: "official"
+    url: "https://www.{province}.gov.cn/"
+    weight: 0.95
+    description: "省级政府门户网站"
+    update_frequency: "实时"
+
+  - name: "各地市人民政府"
+    type: "official"
+    url: "https://www.{city}.gov.cn/"
+    weight: 0.9
+    description: "地市级政府门户网站"
+    update_frequency: "实时"
+
+  # 互联网专有源
+  - name: "百度百科-政府机构"
+    type: "internet"
+    url: "https://baike.baidu.com/"
+    weight: 0.6
+    description: "政府机构百科词条"
+    update_frequency: "不定期"
+
+  - name: "维基百科-中国地方政府"
+    type: "internet"
+    url: "https://zh.wikipedia.org/"
+    weight: 0.55
+    description: "维基百科地方政府条目"
+    update_frequency: "不定期"

@@ -1,0 +1,54 @@
+# POI类型配置: 高等院校
+# 大类: university
+# 说明: 普通高等学校、重点高校等的专有数据源配置
+
+poi_category:
+  name: "高等院校"
+  description: "普通高等学校、重点高校等"
+  call_map_vendors: true
+
+sources:
+  # 官方渠道
+  - name: "教育部"
+    type: "official"
+    url: "http://www.moe.gov.cn/"
+    api_endpoint: "http://www.moe.gov.cn/jyb_xxgk/s5743/s5744/"
+    weight: 1.0
+    description: "全国高等学校名单"
+    update_frequency: "年度"
+
+  - name: "教育部阳光高考平台"
+    type: "official"
+    url: "https://gaokao.chsi.com.cn/"
+    weight: 0.95
+    description: "高校基本信息"
+    update_frequency: "年度"
+
+  - name: "学位与研究生教育信息网"
+    type: "official"
+    url: "https://www.cdgdc.edu.cn/"
+    weight: 0.9
+    description: "高校学科信息"
+    update_frequency: "年度"
+
+  - name: "中国高等教育学生信息网"
+    type: "official"
+    url: "https://www.chsi.com.cn/"
+    weight: 0.9
+    description: "高校学籍信息"
+    update_frequency: "实时"
+
+  # 互联网专有源
+  - name: "百度百科-高校"
+    type: "internet"
+    url: "https://baike.baidu.com/"
+    weight: 0.7
+    description: "高校百科词条"
+    update_frequency: "不定期"
+
+  - name: "各高校官网"
+    type: "internet"
+    url: "https://www.{university}.edu.cn/"
+    weight: 0.75
+    description: "高校官方网站"
+    update_frequency: "实时"

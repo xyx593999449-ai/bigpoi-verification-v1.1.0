@@ -1,0 +1,154 @@
+# POI核实资料源配置文件 - 共用部分
+# 版本: 2.0
+# 说明: 本文件包含所有POI类型共用的配置
+#       包括: 全局配置、API Key凭据池、图商配置
+# 权重范围: 0.0-1.0，1.0为最高可信度
+
+# ============================================================================
+# 全局配置
+# ============================================================================
+global:
+  # 默认置信度阈值
+  confidence_threshold: 0.8
+  # 距离偏差阈值（米）
+  distance_threshold: 50
+  # 名称相似度阈值
+  name_similarity_threshold: 0.85
+  # 请求超时时间（秒）
+  request_timeout: 30
+  # 重试次数
+  retry_count: 3
+
+# ============================================================================
+# 内部代理接口配置
+# ============================================================================
+# 说明: 内部图商代理接口，统一处理认证、限流、重试等问题
+# 策略: 优先调用内部代理，失败后降级到直接调用图商API
+internal_proxy:
+  # 是否启用内部代理
+  enabled: true
+  # 内部代理基础URL
+  base_url: "http://10.82.122.209:9081/botshop/proxy/mapapi"
+  # 请求超时时间（秒）
+  timeout: 30
+  # 重试次数
+  retry_count: 3
+  # 代理失败时是否降级到直接API调用
+  fallback_to_direct: true
+
+# Source 映射配置
+# 说明: 将内部使用的source标识映射到图商API的source参数
+source_mapping:
+  amap: amap2    # 高德地图
+  bmap: bmap     # 百度地图
+  qmap: qmap     # 腾讯地图
+
+# ============================================================================
+# API Key 凭据资源池（支持多 Key 与 Referer 配置，由程序逻辑映射调用）
+# ============================================================================
+credentials:
+  amap:
+    - ak: "9f2fee2d08448231243efb26476e3625"
+      referer: "" # 如果绑定了 Referer，请填写具体域名，否则为空
+
+  bmap:
+    - ak: "2xBld7istSKnGGcNmGrHgQUO1TjuM2Cm"
+      referer: "https://xnova.com/"
+    - ak: "F394d2819a214c06d340783634ab1e36"
+      referer: "http://www.jiuguijiu000799.com/"
+    - ak: "cc20lYsz3cGWBVaIfzGYqCGBNzOZMsHX"
+      referer: "https://ditu.city8.com/"
+    - ak: "g1axqYWMnGnioP0gVcMmmW8WUPAF8m6p"
+      referer: ""
+    - ak: "rq04plvocQ1hVH8ENvSfXLIqosIEAHnP"
+      referer: ""
+    - ak: "k2SX2SmJqCl0u3352QFjZy7bqSawVwnL"
+      referer: ""
+    - ak: "XKMwWHpJhbXG6WmStnfy13ly09noAeRc"
+      referer: ""
+  qmap:
+    - key: "MGVBZ-MTTKW-LB3RI-O5YDH-5QNVO-CVFNC"
+      referer: "https://www.hangfw.com/"
+
+# ============================================================================
+# 图商部分 - 所有POI类型均需调用的共用地图API
+# ============================================================================
+# 说明: 这些数据源对所有POI类型都适用，统一管理，避免在每个POI类型中重复定义
+# 策略: 程序优先调用图商，获得基础位置和分类信息，然后再调用类型特定的官方渠道
+map_vendors:
+  # ========== 高德地图 ==========
+  amap:
+    name: "高德地图"
+    type: "map_vendor"
+    url: "https://www.amap.com/"
+    api_endpoint: "https://restapi.amap.com/v3/place/text"
+    api_key_ref: "amap"
+    weight: 0.85
+    description: "高德地图POI数据（适用所有类型）"
+    update_frequency: "周度"
+    priority: 1  # 优先调用顺序
+
+  # ========== 百度地图 ==========
+  bmap:
+    name: "百度地图"
+    type: "map_vendor"
+    url: "https://map.baidu.com/"
+    api_endpoint: "https://api.map.baidu.com/place/v2/search"
+    api_key_ref: "bmap"
+    weight: 0.85
+    description: "百度地图POI数据（适用所有类型）"
+    update_frequency: "周度"
+    priority: 2
+
+  # ========== 腾讯地图 ==========
+  qmap:
+    name: "腾讯地图"
+    type: "map_vendor"
+    url: "https://map.qq.com/"
+    api_endpoint: "https://apis.map.qq.com/ws/place/v1/search"
+    api_key_ref: "qmap"
+    weight: 0.8
+    description: "腾讯地图POI数据（适用所有类型）"
+    update_frequency: "周度"
+    priority: 3
+
+# ============================================================================
+# 数据源类型权重参考
+# ============================================================================
+source_type_weights:
+  official: 1.0      # 官方渠道
+  map_vendor: 0.85   # 权威图商
+  internet: 0.6      # 互联网抓取
+  web_crawler: 0.55  # 网络爬虫
+
+# ============================================================================
+# 更新频率映射（用于计算数据时效性）
+# ============================================================================
+update_frequency_map:
+  实时: 1.0
+  日度: 0.95
+  周度: 0.9
+  月度: 0.85
+  季度: 0.8
+  年度: 0.75
+  不定期: 0.6
+
+# ============================================================================
+# 使用说明
+# ============================================================================
+# 1. 图商部分(map_vendors)
+#    - 对所有POI类型均适用
+#    - 程序启动时统一加载
+#    - 每个POI类型会自动调用所有图商API获取基础数据
+#
+# 2. POI类型特定配置
+#    - 每个POI类型有独立配置文件: {poi_type}.yaml
+#    - 包含该类型特有的官方渠道和专有源
+#    - 官方渠道: 权重1.0（最可信）
+#    - 互联网源: 权重0.55-0.8
+#
+# 3. 程序调用顺序
+#    Step1: 加载共用配置本文件
+#    Step2: 根据POI类型加载 {poi_type}.yaml
+#    Step3: 优先级: 官方 > 图商 > 互联网专有
+#    Step4: 多源融合计算加权置信度

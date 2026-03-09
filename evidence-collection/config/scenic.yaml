@@ -1,0 +1,68 @@
+# POI类型配置: 景区
+# 大类: scenic
+# 说明: 4A景区、5A景区、世界遗产等的专有数据源配置
+
+poi_category:
+  name: "景区"
+  description: "4A景区、5A景区、世界遗产等"
+  call_map_vendors: true
+
+sources:
+  # 官方渠道
+  - name: "文化和旅游部"
+    type: "official"
+    url: "https://www.mct.gov.cn/"
+    api_endpoint: "https://www.mct.gov.cn/zwgk/zcwj/zcjd/"
+    weight: 1.0
+    description: "A级景区评定结果"
+    update_frequency: "年度"
+
+  - name: "国家林业和草原局"
+    type: "official"
+    url: "https://www.forestry.gov.cn/"
+    weight: 0.95
+    description: "国家森林公园、自然保护区信息"
+    update_frequency: "年度"
+
+  - name: "国家文物局"
+    type: "official"
+    url: "https://www.ncha.gov.cn/"
+    weight: 0.95
+    description: "全国重点文物保护单位"
+    update_frequency: "年度"
+
+  - name: "UNESCO世界遗产中心"
+    type: "official"
+    url: "https://whc.unesco.org/"
+    weight: 1.0
+    description: "世界遗产官方名录"
+    update_frequency: "年度"
+
+  - name: "各省文化和旅游厅"
+    type: "official"
+    url: "https://wlt.{province}.gov.cn/"
+    weight: 0.9
+    description: "省级景区评定信息"
+    update_frequency: "季度"
+
+  # 互联网专有源
+  - name: "百度百科-景区"
+    type: "internet"
+    url: "https://baike.baidu.com/"
+    weight: 0.65
+    description: "景区百科词条"
+    update_frequency: "不定期"
+
+  - name: "马蜂窝"
+    type: "internet"
+    url: "https://www.mafengwo.cn/"
+    weight: 0.6
+    description: "旅游攻略平台"
+    update_frequency: "周度"
+
+  - name: "去哪儿网"
+    type: "internet"
+    url: "https://www.qunar.com/"
+    weight: 0.6
+    description: "旅游信息平台"
+    update_frequency: "周度"

@@ -1,0 +1,5 @@
+host: 10.82.232.122
+port: 5432
+database: big_poi
+user: appdeploy
+password: ywIu5IFAQrHqsnb

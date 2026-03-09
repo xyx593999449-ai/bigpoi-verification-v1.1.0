@@ -1,0 +1,26 @@
+# POI 类型映射引用配置
+# 本配置引用父技能的类型映射文件
+# verification 技能使用此配置进行分类正确性维度的核实
+
+# 引用父技能的类型映射配置
+# 路径：../skills-bigpoi-verfication/config/poi_type_mapping.yaml
+# 或者使用绝对路径
+
+mapping_config:
+  # 类型映射文件路径（相对于技能根目录）
+  file_path: "../skills-bigpoi-verfication/config/poi_type_mapping.yaml"
+
+  # 或者使用绝对路径（推荐用于生产环境）
+  # file_path: "d:/办公/13-AI/数字员工/ai-skills/ai-skills/skills/Product/bigpoi-verification-v1.1.0/skills-bigpoi-verfication/config/poi_type_mapping.yaml"
+
+# 使用说明：
+# 1. verification 技能读取父技能的 poi_type_mapping.yaml 配置
+# 2. 使用映射配置将输入的类型代码（如 "090101"）映射到白名单类型（如 "hospital"）
+# 3. 在分类正确性核实时，检查证据中的 POI 分类是否与映射后的类型匹配
+# 4. 输出时保持原始类型代码，不进行转换
+
+# 映射示例：
+# 输入: poi_type = "090101"
+# 映射: 090101 → hospital（通过配置文件映射）
+# 核实: 检查证据中是否包含"综合医院"、"三甲医院"等相关分类
+# 输出: category = "090101"（保持原始类型代码）
