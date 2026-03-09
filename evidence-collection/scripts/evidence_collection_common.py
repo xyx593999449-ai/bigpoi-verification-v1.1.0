@@ -669,3 +669,121 @@ def iter_unique(items: Iterable[str]) -> list[str]:
             result.append(item)
     return result
 
+
+def _strip_inline_comment(value: str) -> str:
+    in_single = False
+    in_double = False
+    result: list[str] = []
+    for char in value:
+        if char == "'" and not in_double:
+            in_single = not in_single
+        elif char == '"' and not in_single:
+            in_double = not in_double
+        elif char == '#' and not in_single and not in_double:
+            break
+        result.append(char)
+    return ''.join(result).rstrip()
+
+
+def _clean_yaml_value(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = _strip_inline_comment(value).strip()
+    return cleaned if cleaned else None
+
+
+def get_repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def get_common_config_path(config_path: str | Path | None = None) -> Path:
+    if config_path is not None:
+        return Path(config_path)
+    return get_repo_root() / 'evidence-collection' / 'config' / 'common.yaml'
+
+
+def get_common_config_lines(config_path: str | Path | None = None) -> list[str]:
+    path = get_common_config_path(config_path)
+    if not path.is_file():
+        raise FileNotFoundError(f"Common config not found: {path}")
+    return path.read_text(encoding='utf-8-sig').splitlines()
+
+
+def get_internal_proxy_config(config_path: str | Path | None = None) -> dict[str, Any]:
+    lines = get_common_config_lines(config_path)
+    in_section = False
+    config: dict[str, Any] = {}
+    for line in lines:
+        if not in_section:
+            if re.match(r'^\s*internal_proxy:\s*$', line):
+                in_section = True
+            continue
+        if re.match(r'^\S', line):
+            break
+        match = re.match(r'^\s{2}([A-Za-z_]+):\s*(.*?)\s*$', line)
+        if not match:
+            continue
+        key = match.group(1)
+        raw_value = _clean_yaml_value(match.group(2))
+        config[key] = convert_yaml_scalar(raw_value)
+    return config
+
+
+def get_vendor_credentials(source: str, config_path: str | Path | None = None) -> list[dict[str, str]]:
+    lines = get_common_config_lines(config_path)
+    in_credentials = False
+    in_vendor = False
+    vendor_indent = None
+    current: dict[str, str] | None = None
+    credentials: list[dict[str, str]] = []
+
+    for line in lines:
+        if not in_credentials:
+            if re.match(r'^\s*credentials:\s*$', line):
+                in_credentials = True
+            continue
+
+        if re.match(r'^\S', line):
+            break
+
+        vendor_match = re.match(r'^\s{2}([A-Za-z0-9_]+):\s*$', line)
+        if vendor_match:
+            if current is not None and in_vendor:
+                credentials.append(current)
+                current = None
+            in_vendor = vendor_match.group(1) == source
+            vendor_indent = len(line) - len(line.lstrip(' '))
+            continue
+
+        if not in_vendor:
+            continue
+
+        indent = len(line) - len(line.lstrip(' '))
+        if vendor_indent is not None and indent <= vendor_indent and line.strip():
+            break
+
+        entry_match = re.match(r'^\s*[-]\s*([A-Za-z_]+):\s*(.*?)\s*$', line)
+        if entry_match:
+            if current is not None:
+                credentials.append(current)
+            key = entry_match.group(1)
+            raw_value = _clean_yaml_value(entry_match.group(2))
+            current = {key: '' if raw_value is None else str(convert_yaml_scalar(raw_value))}
+            continue
+
+        field_match = re.match(r'^\s+([A-Za-z_]+):\s*(.*?)\s*$', line)
+        if field_match and current is not None:
+            key = field_match.group(1)
+            raw_value = _clean_yaml_value(field_match.group(2))
+            current[key] = '' if raw_value is None else str(convert_yaml_scalar(raw_value))
+
+    if current is not None and in_vendor:
+        credentials.append(current)
+    return credentials
+
+
+def get_vendor_credential(source: str, config_path: str | Path | None = None) -> dict[str, str]:
+    credentials = get_vendor_credentials(source, config_path)
+    if not credentials:
+        raise ValueError(f"No credential configured for vendor: {source}")
+    return credentials[0]

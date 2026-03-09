@@ -15,29 +15,17 @@ if str(SCRIPT_DIR) not in sys.path:
 from evidence_collection_common import (
     convert_map_vendor_api_response,
     ensure_stdout_utf8,
+    get_internal_proxy_config,
     get_map_vendor_definition,
-    read_json_file,
     utc_iso_now,
     write_json_file,
 )
 
 
-PROXY_BASE_URL = "http://10.82.122.209:9081/botshop/proxy/mapapi"
 VENDORS = ("amap", "bmap", "qmap")
 
 
-def load_mock_payload(path: str | None, vendor: str):
-    if not path:
-        return None
-    payload = read_json_file(path)
-    if isinstance(payload, dict) and isinstance(payload.get(vendor), dict):
-        return payload[vendor]
-    if isinstance(payload, dict):
-        return payload
-    raise ValueError(f"mock payload for {vendor} must be an object")
-
-
-def fetch_proxy_response(vendor: str, city: str, poi_name: str, timeout_seconds: int) -> dict:
+def fetch_proxy_response(base_url: str, vendor: str, city: str, poi_name: str, timeout_seconds: int) -> dict:
     definition = get_map_vendor_definition(vendor)
     params = {
         "source": definition["proxy_source"],
@@ -45,7 +33,7 @@ def fetch_proxy_response(vendor: str, city: str, poi_name: str, timeout_seconds:
         "city": city,
         "keyword": poi_name,
     }
-    uri = f"{PROXY_BASE_URL}?{urllib.parse.urlencode(params)}"
+    uri = f"{base_url}?{urllib.parse.urlencode(params)}"
     with urllib.request.urlopen(uri, timeout=timeout_seconds) as response:
         raw = response.read().decode("utf-8")
     return json.loads(raw)
@@ -57,9 +45,15 @@ def main() -> int:
     parser.add_argument("-PoiName", required=True)
     parser.add_argument("-City", required=True)
     parser.add_argument("-OutputPath", required=True)
-    parser.add_argument("-MockResponsePath")
-    parser.add_argument("-TimeoutSeconds", type=int, default=30)
+    parser.add_argument("-CommonConfigPath")
+    parser.add_argument("-TimeoutSeconds", type=int)
     args = parser.parse_args()
+
+    proxy_config = get_internal_proxy_config(args.CommonConfigPath)
+    base_url = str(proxy_config.get("base_url") or "").strip()
+    if not base_url:
+        raise ValueError("internal_proxy.base_url is required in common.yaml")
+    timeout_seconds = args.TimeoutSeconds if args.TimeoutSeconds is not None else int(proxy_config.get("timeout") or 30)
 
     vendor_results: dict[str, dict] = {}
     missing_vendors: list[str] = []
@@ -72,9 +66,7 @@ def main() -> int:
         error_message = None
 
         try:
-            raw_response = load_mock_payload(args.MockResponsePath, vendor)
-            if raw_response is None:
-                raw_response = fetch_proxy_response(vendor, args.City, args.PoiName, args.TimeoutSeconds)
+            raw_response = fetch_proxy_response(base_url, vendor, args.City, args.PoiName, timeout_seconds)
             items = convert_map_vendor_api_response(vendor, raw_response)
             vendor_status = "ok" if items else "empty"
             if vendor_status == "ok":

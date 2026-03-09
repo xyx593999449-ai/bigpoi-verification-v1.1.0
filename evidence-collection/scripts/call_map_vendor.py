@@ -16,7 +16,7 @@ from evidence_collection_common import (
     convert_map_vendor_api_response,
     ensure_stdout_utf8,
     get_map_vendor_definition,
-    read_json_file,
+    get_vendor_credential,
     utc_iso_now,
     write_json_file,
 )
@@ -67,10 +67,10 @@ def main() -> int:
     parser.add_argument("-PoiName", required=True)
     parser.add_argument("-City", required=True)
     parser.add_argument("-Source", required=True, choices=["amap", "bmap", "qmap"])
-    parser.add_argument("-Credential", required=True)
     parser.add_argument("-OutputPath", required=True)
+    parser.add_argument("-Credential")
     parser.add_argument("-Referer")
-    parser.add_argument("-MockResponsePath")
+    parser.add_argument("-CommonConfigPath")
     parser.add_argument("-TimeoutSeconds", type=int, default=30)
     args = parser.parse_args()
 
@@ -79,9 +79,18 @@ def main() -> int:
     error_message = None
 
     try:
-        raw_response = read_json_file(args.MockResponsePath) if args.MockResponsePath else None
-        if raw_response is None:
-            raw_response = fetch_vendor_response(args.Source, args.Credential, args.City, args.PoiName, args.Referer, args.TimeoutSeconds)
+        referer = args.Referer
+        credential = args.Credential
+        if not credential:
+            credential_info = get_vendor_credential(args.Source, args.CommonConfigPath)
+            definition = get_map_vendor_definition(args.Source)
+            credential_field = str(definition["credential_field"])
+            credential = str(credential_info.get(credential_field) or credential_info.get("ak") or credential_info.get("key") or "").strip()
+            if not credential:
+                raise ValueError(f"Credential field {credential_field} is missing for vendor: {args.Source}")
+            if not referer:
+                referer = str(credential_info.get("referer") or "").strip() or None
+        raw_response = fetch_vendor_response(args.Source, credential, args.City, args.PoiName, referer, args.TimeoutSeconds)
         items = convert_map_vendor_api_response(args.Source, raw_response)
         status = "ok" if items else "empty"
     except Exception as exc:

@@ -27,9 +27,9 @@
 - **证据收集流程改为固定并行编排**：内部图商代理固定同时请求 `amap / bmap / qmap`，并与 `websearch / webfetch` 分支并行执行；仅当内部代理存在 `missing_vendors` 时，才允许单独调用对应图商 API 补采
 - **父技能末尾增加硬性规格校验**：父技能在最终产物落盘后必须执行目录、文件名、文件内容三层校验；若失败，必须根据 `failed_stage` 打回 `evidence_collection`、`verification` 或 `parent_integration`
 - **技能文档统一改为 Python 调用方式**：
-  - `evidence-collection/skill.md`
-  - `verification/skill.md`
-  - `skills-bigpoi-verfication/skill.md`
+  - `evidence-collection/SKILL.md`
+  - `verification/SKILL.md`
+  - `skills-bigpoi-verfication/SKILL.md`
   文档中的正式调用示例已统一从 PowerShell 切换为 `python ...`
 - **编码兼容性增强**：公共读文件逻辑兼容 `UTF-8 BOM`，避免已有输入、mock 或中间 JSON 在 Python 下因 BOM 直接解析失败
 
@@ -59,9 +59,9 @@
   - `skills-bigpoi-verfication/scripts/bundle_common.py`
   - `skills-bigpoi-verfication/scripts/write_result_bundle.py`
   - `skills-bigpoi-verfication/scripts/validate_result_bundle.py`
-  - `evidence-collection/skill.md`
-  - `verification/skill.md`
-  - `skills-bigpoi-verfication/skill.md`
+  - `evidence-collection/SKILL.md`
+  - `verification/SKILL.md`
+  - `skills-bigpoi-verfication/SKILL.md`
 
 ---
 ## [1.5.0] - 2026-03-05
@@ -69,8 +69,8 @@
 ### 修复 (Fixed) - Schema 定义和文档歧义问题
 
 - **职责划分明确**：修复文档歧义导致的 record 格式错误问题
-  - `verification/skill.md`：明确子技能只输出决策结构（decision.schema.json），不生成入库记录
-  - `skills-bigpoi-verfication/skill.md`：明确主技能负责整合生成入库记录（record.schema.json）
+  - `verification/SKILL.md`：明确子技能只输出决策结构（decision.schema.json），不生成入库记录
+  - `skills-bigpoi-verfication/SKILL.md`：明确主技能负责整合生成入库记录（record.schema.json）
   - 消除文档中的职责重叠，避免 LLM 输出格式混乱
 
 - **字段命名统一**：统一 input.schema 和 record.schema 中的字段命名
@@ -96,8 +96,8 @@
 ### 影响范围
 
 - **主要修改文件**：
-  - `verification/skill.md` - 明确输出职责
-  - `skills-bigpoi-verfication/skill.md` - 明确主技能职责
+  - `verification/SKILL.md` - 明确输出职责
+  - `skills-bigpoi-verfication/SKILL.md` - 明确主技能职责
   - `schema/input.schema.json` - 统一字段命名，更新版本为 v1.2.0
   - `schema/record.schema.json` - 增加 city_adcode 字段，更新版本为 v1.2.0
 
@@ -225,7 +225,7 @@
 - **类型代码输出问题**：强调输出必须使用公司内部类型代码
   - `read-pg-bigpoi/SKILL.md`：添加严禁转换 poi_type 的说明
   - `update-pg-bigpoi/SKILL.md`：强调输入必须使用公司内部类型代码
-  - `verification/skill.md`：添加类型代码输出要求，明确映射仅用于内部校验
+  - `verification/SKILL.md`：添加类型代码输出要求，明确映射仅用于内部校验
   - `schema/record.schema.json`：修改字段描述，明确必须使用类型代码；修正示例数据
     - `input_data.poi_type`：添加类型代码说明
     - `final_values.category`：修改为"保持原始类型代码"
@@ -250,7 +250,7 @@
 
 - **证据记录格式不一致问题**：明确 `evidence_record` 字段必须严格按照 `evidence.schema.json` 定义的格式
   - `update-pg-bigpoi/SKILL.md`：更新 `evidence_record` 格式为证据数组格式
-  - `evidence-collection/skill.md`：更新输出格式要求，严格符合 schema 定义
+  - `evidence-collection/SKILL.md`：更新输出格式要求，严格符合 schema 定义
 
 - **正确格式（证据数组，每项符合 evidence.schema.json）**：
   ```json
@@ -349,7 +349,7 @@
   - `evidence-collection/config/airport.yaml` (新增)
   - `evidence-collection/config/railway_station.yaml` (新增)
   - `evidence-collection/config/sources.yaml` (删除)
-  - `evidence-collection/skill.md`
+  - `evidence-collection/SKILL.md`
 
 ## [1.1.0] - 2026-02-10
 
@@ -420,5 +420,6 @@
 
 ### 评审 (Review)
 - 完成了对整个 Skill 包的深度技术评审，确认了其纯规则引擎（零 Token 消耗）的特性，并提出了引入 LLM 混合模式处理复杂语义别名的优化建议。
+
 
 
