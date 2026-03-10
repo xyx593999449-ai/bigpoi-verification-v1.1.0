@@ -1,4 +1,4 @@
-﻿# BigPOI Verification Skills
+# BigPOI Verification Skills
 
 本仓库用于维护大 POI 核实技能及其父子技能脚本，覆盖证据收集、核实决策、结果成包与最终规格校验。
 

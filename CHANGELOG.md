@@ -1,4 +1,4 @@
-﻿# 更新履历 (CHANGELOG)
+# 更新履历 (CHANGELOG)
 
 本文件用于记录 `bigpoi-verification` skill 包的所有重大变更、修复与改进。
 

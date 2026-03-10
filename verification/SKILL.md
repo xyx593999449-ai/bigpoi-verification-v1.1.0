@@ -1,4 +1,4 @@
-﻿---
+---
 name: verification
 description: 面向大 POI 核实流程的子技能。用于基于输入 POI 文件和正式 `evidence` 文件给出结构化维度判断，并且必须通过脚本生成稳定的 `decision` 文件。适用于父技能需要一个严格符合 `decision.schema.json` 的核实决策产物时；本技能不得生成最终 `record` 或 `index`。
 ---

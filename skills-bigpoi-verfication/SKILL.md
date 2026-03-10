@@ -1,5 +1,5 @@
-﻿---
-name: bigpoi-verification
+---
+name: skills-bigpoi-verification
 description: 面向大 POI 核实任务的父技能。用于编排 `evidence-collection` 与 `verification` 子技能，整合 input/evidence-file/decision 生成最终 `record` 与 `index` 输出包，并在流程末尾执行目录、文件名、文件内容的硬性校验。遇到最终规格校验失败时，必须根据 `failed_stage` 打回到对应环节重新执行，而不是手改结果文件。
 ---
 
