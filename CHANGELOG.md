@@ -2,6 +2,19 @@
 
 本文件用于记录 `bigpoi-verification` skill 包的所有重大变更、修复与改进。
 
+## [1.6.2] - 2026-03-10
+
+### 修复 (Fixed) - write-pg-verified 重试场景下的 index 选择错误
+
+- **多份 index 文件按最新时间戳择优**：修复 `write-pg-verified/SKILL.py` 在 `task_id + search_directory` 模式下命中第一个 index 即返回的问题。现在会收集所有 `task_id` 匹配的候选 index，并按文件最后修改时间降序选择最新结果，避免调度重试后继续误用旧的错误产物。
+- **补充重试兼容说明**：更新 `write-pg-verified/SKILL.md`，明确说明同一 `task_id` 存在多个 index 时的选择规则、推荐调用方式，以及日志中会记录候选数量与最终命中的最新文件。
+
+### 影响范围
+
+- `write-pg-verified/SKILL.py`
+- `write-pg-verified/SKILL.md`
+
+---
 ## [1.6.1] - 2026-03-10
 
 ### 新增 (Added) - 图商相关性初筛稳定化
