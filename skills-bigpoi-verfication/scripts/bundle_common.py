@@ -330,3 +330,26 @@ def find_latest_index(task_dir: str | Path) -> dict[str, Any] | None:
         "latest": str(files[0]),
         "all": [str(path) for path in files],
     }
+
+def prune_empty(value: Any) -> Any:
+    if isinstance(value, dict):
+        result: dict[str, Any] = {}
+        for key, item in value.items():
+            pruned = prune_empty(item)
+            if pruned is None:
+                continue
+            result[key] = pruned
+        return result or None
+    if isinstance(value, list):
+        result = []
+        for item in value:
+            pruned = prune_empty(item)
+            if pruned is None:
+                continue
+            result.append(pruned)
+        return result or None
+    if value is None:
+        return None
+    if isinstance(value, str) and not value.strip():
+        return None
+    return value

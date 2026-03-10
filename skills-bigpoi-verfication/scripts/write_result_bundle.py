@@ -16,6 +16,7 @@ from bundle_common import (
     build_record,
     ensure_stdout_utf8,
     normalize_input,
+    prune_empty,
     read_json_file,
     validate_basic_decision,
     validate_basic_evidence,
@@ -57,23 +58,28 @@ def main() -> int:
     record_out = task_dir / f"record_{timestamp}.json"
     index_out = task_dir / f"index_{timestamp}.json"
 
-    write_json_file(decision, decision_out)
-    write_json_file(evidence, evidence_out)
-    record = build_record(input_data, evidence, decision, timestamp)
+    compact_decision = prune_empty(decision)
+    compact_evidence = prune_empty(evidence)
+    write_json_file(compact_decision, decision_out)
+    write_json_file(compact_evidence, evidence_out)
+
+    record = prune_empty(build_record(input_data, compact_evidence, compact_decision, timestamp))
     write_json_file(record, record_out)
 
-    index = {
-        "poi_id": str(input_data["id"]),
-        "task_id": task_id,
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "task_dir": f"output/results/{task_id}",
-        "files": {
-            "decision": str(decision_out.resolve()),
-            "evidence": str(evidence_out.resolve()),
-            "record": str(record_out.resolve()),
-        },
-        "description": "Big POI verification result bundle",
-    }
+    index = prune_empty(
+        {
+            "poi_id": str(input_data["id"]),
+            "task_id": task_id,
+            "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "task_dir": f"output/results/{task_id}",
+            "files": {
+                "decision": str(decision_out.resolve()),
+                "evidence": str(evidence_out.resolve()),
+                "record": str(record_out.resolve()),
+            },
+            "description": "Big POI verification result bundle",
+        }
+    )
     write_json_file(index, index_out)
 
     validator = SCRIPT_DIR / "validate_result_bundle.py"

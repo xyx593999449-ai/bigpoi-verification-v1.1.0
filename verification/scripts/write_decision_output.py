@@ -16,6 +16,30 @@ def ensure_stdout_utf8() -> None:
         sys.stderr.reconfigure(encoding="utf-8")
 
 
+def prune_empty(value):
+    if isinstance(value, dict):
+        result = {}
+        for key, item in value.items():
+            pruned = prune_empty(item)
+            if pruned is None:
+                continue
+            result[key] = pruned
+        return result or None
+    if isinstance(value, list):
+        result = []
+        for item in value:
+            pruned = prune_empty(item)
+            if pruned is None:
+                continue
+            result.append(pruned)
+        return result or None
+    if value is None:
+        return None
+    if isinstance(value, str) and not value.strip():
+        return None
+    return value
+
+
 def read_json_file(path: str | Path):
     file_path = Path(path)
     if not file_path.is_file():
@@ -272,6 +296,7 @@ def main() -> int:
     if "corrections" in seed:
         decision["corrections"] = seed["corrections"]
 
+    decision = prune_empty(decision)
     output_directory = Path(args.OutputDirectory)
     output_directory.mkdir(parents=True, exist_ok=True)
     output_path = output_directory / f"decision_{stamp}.json"

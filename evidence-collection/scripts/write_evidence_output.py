@@ -18,6 +18,30 @@ from evidence_collection_common import ensure_stdout_utf8, normalize_input_poi, 
 ALLOWED_SOURCE_TYPES = {"official", "map_vendor", "internet", "user_contributed", "other"}
 
 
+def prune_empty(value):
+    if isinstance(value, dict):
+        result = {}
+        for key, item in value.items():
+            pruned = prune_empty(item)
+            if pruned is None:
+                continue
+            result[key] = pruned
+        return result or None
+    if isinstance(value, list):
+        result = []
+        for item in value:
+            pruned = prune_empty(item)
+            if pruned is None:
+                continue
+            result.append(pruned)
+        return result or None
+    if value is None:
+        return None
+    if isinstance(value, str) and not value.strip():
+        return None
+    return value
+
+
 def is_iso_time(value: str) -> bool:
     try:
         datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -66,7 +90,7 @@ def normalize_evidence_item(item: dict, poi: dict, timestamp: str, index: int, e
             if weight < 0 or weight > 1:
                 errors.append(f"{prefix}.source.weight must be between 0 and 1")
             normalized_source["weight"] = weight
-        normalized["source"] = normalized_source
+        normalized["source"] = prune_empty(normalized_source)
 
     collected_at = str(item.get("collected_at") or utc_iso_now())
     if not is_iso_time(collected_at):
@@ -98,11 +122,13 @@ def normalize_evidence_item(item: dict, poi: dict, timestamp: str, index: int, e
             normalized_data["administrative"] = data["administrative"]
         if isinstance(data.get("raw_data"), dict):
             normalized_data["raw_data"] = data["raw_data"]
-        normalized["data"] = normalized_data
+        normalized["data"] = prune_empty(normalized_data)
 
     for field in ("verification", "matching", "metadata"):
         if isinstance(item.get(field), dict):
-            normalized[field] = item[field]
+            pruned = prune_empty(item[field])
+            if pruned is not None:
+                normalized[field] = pruned
 
     return normalized
 
@@ -135,6 +161,7 @@ def main() -> int:
             continue
         normalized_items.append(normalize_evidence_item(item, poi, timestamp, index, errors))
 
+    normalized_items = [item for item in (prune_empty(item) for item in normalized_items) if item is not None]
     if not normalized_items:
         errors.append("no evidence items were produced")
     if errors:
