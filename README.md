@@ -8,7 +8,7 @@
 
 当前仓库包含三层技能：
 
-- `skills-bigpoi-verfication/`：父技能，负责编排证据收集、核实决策、结果成包、最终验收
+- `skills-bigpoi-verification/`：父技能，负责编排证据收集、核实决策、结果成包、最终验收
 - `evidence-collection/`：证据收集子技能，负责图商代理、图商补采、websearch/webfetch 归并与 evidence 文件输出
 - `verification/`：核实子技能，负责维度判断与 decision 文件输出
 
@@ -16,8 +16,8 @@
 
 - `evidence-collection/scripts/*.py`
 - `verification/scripts/write_decision_output.py`
-- `skills-bigpoi-verfication/scripts/write_result_bundle.py`
-- `skills-bigpoi-verfication/scripts/validate_result_bundle.py`
+- `skills-bigpoi-verification/scripts/write_result_bundle.py`
+- `skills-bigpoi-verification/scripts/validate_result_bundle.py`
 
 ## Claude Code 技能配置方式
 
@@ -97,7 +97,7 @@ Claude Code 常见的两种技能放置方式：
 
 父技能维护主类型映射：
 
-- `skills-bigpoi-verfication/config/poi_type_mapping.yaml`
+- `skills-bigpoi-verification/config/poi_type_mapping.yaml`
 
 用途：
 
@@ -124,10 +124,10 @@ Claude Code 常见的两种技能放置方式：
 
 父技能目录维护正式 schema：
 
-- `skills-bigpoi-verfication/schema/input.schema.json`
-- `skills-bigpoi-verfication/schema/evidence.schema.json`
-- `skills-bigpoi-verfication/schema/decision.schema.json`
-- `skills-bigpoi-verfication/schema/record.schema.json`
+- `skills-bigpoi-verification/schema/input.schema.json`
+- `skills-bigpoi-verification/schema/evidence.schema.json`
+- `skills-bigpoi-verification/schema/decision.schema.json`
+- `skills-bigpoi-verification/schema/record.schema.json`
 
 用途：
 
@@ -217,11 +217,12 @@ output/results/{task_id}/
 - `evidence-collection/scripts/build_web_source_plan.py`
 - `evidence-collection/scripts/call_internal_proxy.py`
 - `evidence-collection/scripts/call_map_vendor.py`
+- `evidence-collection/scripts/write_map_relevance_review.py`
 - `evidence-collection/scripts/merge_evidence_collection_outputs.py`
 - `evidence-collection/scripts/write_evidence_output.py`
 - `verification/scripts/write_decision_output.py`
-- `skills-bigpoi-verfication/scripts/write_result_bundle.py`
-- `skills-bigpoi-verfication/scripts/validate_result_bundle.py`
+- `skills-bigpoi-verification/scripts/write_result_bundle.py`
+- `skills-bigpoi-verification/scripts/validate_result_bundle.py`
 
 ### 仓库内其他历史脚本依赖
 
@@ -239,8 +240,10 @@ output/results/{task_id}/
 ```bash
 python evidence-collection/scripts/build_web_source_plan.py -PoiPath <input.json> -OutputPath <web-plan.json>
 python evidence-collection/scripts/call_internal_proxy.py -PoiName <poi-name> -City <city> -OutputPath <internal-proxy.json>
-python evidence-collection/scripts/call_map_vendor.py -PoiName <poi-name> -City <city> -Source <amap|bmap|qmap> -Credential <credential> -OutputPath <vendor-fallback.json>
-python evidence-collection/scripts/merge_evidence_collection_outputs.py -PoiPath <input.json> -InternalProxyPath <internal-proxy.json> -WebSearchPath <websearch.json> -WebFetchPath <webfetch.json> -VendorFallbackPaths <vendor-a.json> <vendor-b.json> -OutputPath <merged.json>
+python evidence-collection/scripts/write_map_relevance_review.py -RawMapPath <map-raw.json> -ReviewSeedPath <map-review-seed.json> -OutputPath <map-reviewed.json>
+python evidence-collection/scripts/call_map_vendor.py -PoiName <poi-name> -City <city> -Source <amap|bmap|qmap> -OutputPath <vendor-fallback.json>
+python evidence-collection/scripts/write_map_relevance_review.py -RawMapPath <vendor-fallback.json> -ReviewSeedPath <vendor-review-seed.json> -OutputPath <vendor-reviewed.json>
+python evidence-collection/scripts/merge_evidence_collection_outputs.py -PoiPath <input.json> -InternalProxyPath <map-reviewed-internal-proxy.json> -WebSearchPath <websearch.json> -WebFetchPath <webfetch.json> -VendorFallbackPaths <map-reviewed-vendor-a.json> <map-reviewed-vendor-b.json> -OutputPath <merged.json>
 python evidence-collection/scripts/write_evidence_output.py -PoiPath <input.json> -CollectorOutputPath <merged.json> -OutputDirectory <staging-dir>
 ```
 
@@ -253,8 +256,8 @@ python verification/scripts/write_decision_output.py -PoiPath <input.json> -Evid
 ### 结果成包与终检
 
 ```bash
-python skills-bigpoi-verfication/scripts/write_result_bundle.py -InputPath <input.json> -EvidencePath <evidence-file.json> -DecisionPath <decision.json> -WorkspaceRoot <repo-root>
-python skills-bigpoi-verfication/scripts/validate_result_bundle.py -TaskDir <output/results/{task_id}>
+python skills-bigpoi-verification/scripts/write_result_bundle.py -InputPath <input.json> -EvidencePath <evidence-file.json> -DecisionPath <decision.json> -WorkspaceRoot <repo-root>
+python skills-bigpoi-verification/scripts/validate_result_bundle.py -TaskDir <output/results/{task_id}>
 ```
 
 ## 当前建议

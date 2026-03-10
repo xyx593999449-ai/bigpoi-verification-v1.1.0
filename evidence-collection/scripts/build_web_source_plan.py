@@ -51,7 +51,7 @@ def main() -> int:
             raise ValueError(f"input.{field} is required")
 
     repo_root = SCRIPT_DIR.parent.parent
-    mapping_path = repo_root / "skills-bigpoi-verfication" / "config" / "poi_type_mapping.yaml"
+    mapping_path = repo_root / "skills-bigpoi-verification" / "config" / "poi_type_mapping.yaml"
     config_name = resolve_poi_type_category(str(poi["poi_type"]), mapping_path)
     if not config_name:
         raise ValueError(f"unsupported poi_type for evidence collection: {poi['poi_type']}")

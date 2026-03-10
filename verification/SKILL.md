@@ -34,13 +34,13 @@ description: 面向大 POI 核实流程的子技能。用于基于输入 POI 文
 
 本技能只接受两类正式输入：
 
-- 输入 POI 文件：遵循 `skills-bigpoi-verfication/schema/input.schema.json`
+- 输入 POI 文件：遵循 `skills-bigpoi-verification/schema/input.schema.json`
 - 证据文件：路径指向 `evidence-collection` 产出的 `evidence_*.json`
 
 证据文件要求：
 
 - 文件内容必须是证据数组
-- 每个 item 遵循 `skills-bigpoi-verfication/schema/evidence.schema.json`
+- 每个 item 遵循 `skills-bigpoi-verification/schema/evidence.schema.json`
 - `poi_id` 必须与输入 `id` 一致
 
 分类字段约束：
@@ -112,8 +112,8 @@ python verification/scripts/write_decision_output.py -PoiPath <input.json> -Evid
 
 仅在需要时读取：
 
-- `skills-bigpoi-verfication/schema/decision.schema.json`
-- `skills-bigpoi-verfication/schema/evidence.schema.json`
+- `skills-bigpoi-verification/schema/decision.schema.json`
+- `skills-bigpoi-verification/schema/evidence.schema.json`
 - `verification/config/thresholds.yaml`
 - `verification/config/downgrade.yaml`
 - `verification/config/type_mapping.yaml`

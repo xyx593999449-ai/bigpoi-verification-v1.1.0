@@ -3,15 +3,15 @@
 # verification 技能使用此配置进行分类正确性维度的核实
 
 # 引用父技能的类型映射配置
-# 路径：../skills-bigpoi-verfication/config/poi_type_mapping.yaml
+# 路径：../skills-bigpoi-verification/config/poi_type_mapping.yaml
 # 或者使用绝对路径
 
 mapping_config:
   # 类型映射文件路径（相对于技能根目录）
-  file_path: "../skills-bigpoi-verfication/config/poi_type_mapping.yaml"
+  file_path: "../skills-bigpoi-verification/config/poi_type_mapping.yaml"
 
   # 或者使用绝对路径（推荐用于生产环境）
-  # file_path: "d:/办公/13-AI/数字员工/ai-skills/ai-skills/skills/Product/bigpoi-verification-v1.1.0/skills-bigpoi-verfication/config/poi_type_mapping.yaml"
+  # file_path: "d:/办公/13-AI/数字员工/ai-skills/ai-skills/skills/Product/bigpoi-verification-v1.1.0/skills-bigpoi-verification/config/poi_type_mapping.yaml"
 
 # 使用说明：
 # 1. verification 技能读取父技能的 poi_type_mapping.yaml 配置

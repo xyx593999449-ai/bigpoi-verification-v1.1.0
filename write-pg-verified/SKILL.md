@@ -84,7 +84,7 @@ results = execute_batch(
 
 ## 多 index 选择规则
 
-当使用 `task_id + search_directory` 模式时：
+当使用 `task_id + search_directory` 模式时:
 
 - 递归匹配可能的 `index*.json`
 - 只保留文件内容里 `task_id` 一致的候选

@@ -25,19 +25,20 @@
 
 - **技能文件名统一为 `SKILL.md`**：将正式技能文档统一收敛为 Claude Code 规范要求的 `SKILL.md` 命名
   - `evidence-collection/SKILL.md`
-  - `skills-bigpoi-verfication/SKILL.md`
+  - `skills-bigpoi-verification/SKILL.md`
   - `verification/SKILL.md`
 - **正式 evidence 命名口径收紧**：明确只有完成相关性初筛、归并和规范化之后的最终证据文件，才能命名为 `evidence_<timestamp>.json`
 - **过程文件命名与索引约束补充**：原始检索结果、图商原始结果、review 结果与归并中间结果统一视为过程文件，必须使用过程命名，不得进入最终 `index`
 - **父技能交付边界同步更新**：父技能文档同步声明过程文件只能存在于 `output/` 下的过程目录中，不属于正式交付目录的一部分
 - **README 同步更新**：补充 Claude Code 技能目录规范、正式文件与过程文件的命名区别，以及部署时的交付约束
+- **补回 evidence-collection 初筛流程说明**：修正文档恢复时遗漏的步骤，明确图商原始结果与补采结果都必须先经过 `write_map_relevance_review.py` 产出 reviewed JSON，之后才能进入归并
 
 ### 影响范围
 
 - **主要修改文件**：
   - `README.md`
   - `evidence-collection/SKILL.md`
-  - `skills-bigpoi-verfication/SKILL.md`
+  - `skills-bigpoi-verification/SKILL.md`
   - `verification/SKILL.md`
   - `evidence-collection/scripts/write_map_relevance_review.py`
 
@@ -49,8 +50,8 @@
 - **父子技能正式结果写入脚本补齐**：为 `evidence-collection`、`verification`、`bigpoi-verification` 三层补齐正式结果写入与校验脚本，确保正式产物只能通过脚本落盘生成
   - `evidence-collection/scripts/write_evidence_output.py`：统一生成 `evidence_<timestamp>.json`
   - `verification/scripts/write_decision_output.py`：统一生成 `decision_<timestamp>.json`
-  - `skills-bigpoi-verfication/scripts/write_result_bundle.py`：统一生成 `decision/evidence/record/index` 结果包
-  - `skills-bigpoi-verfication/scripts/validate_result_bundle.py`：对目录结构、文件命名、文件内容执行最终规格校验
+  - `skills-bigpoi-verification/scripts/write_result_bundle.py`：统一生成 `decision/evidence/record/index` 结果包
+  - `skills-bigpoi-verification/scripts/validate_result_bundle.py`：对目录结构、文件命名、文件内容执行最终规格校验
 
 - **证据收集并行链路脚本化**：新增并固定证据收集阶段的正式 Python 入口，覆盖内部代理、图商补采、归并规范化、落盘四个阶段
   - `evidence-collection/scripts/build_web_source_plan.py`
@@ -59,7 +60,7 @@
   - `evidence-collection/scripts/merge_evidence_collection_outputs.py`
   - `evidence-collection/scripts/evidence_collection_common.py`
 
-- **父技能成包公共逻辑沉淀**：新增 `skills-bigpoi-verfication/scripts/bundle_common.py`，统一输入规范化、记录生成、哈希命名与 bundle 校验辅助逻辑
+- **父技能成包公共逻辑沉淀**：新增 `skills-bigpoi-verification/scripts/bundle_common.py`，统一输入规范化、记录生成、哈希命名与 bundle 校验辅助逻辑
 
 ### 变更 (Changed) - 证据输入契约与流程约束
 
@@ -69,7 +70,7 @@
 - **技能文档统一改为 Python 调用方式**：
   - `evidence-collection/SKILL.md`
   - `verification/SKILL.md`
-  - `skills-bigpoi-verfication/SKILL.md`
+  - `skills-bigpoi-verification/SKILL.md`
   文档中的正式调用示例已统一从 PowerShell 切换为 `python ...`
 - **编码兼容性增强**：公共读文件逻辑兼容 `UTF-8 BOM`，避免已有输入、mock 或中间 JSON 在 Python 下因 BOM 直接解析失败
 
@@ -83,8 +84,8 @@
   - `evidence-collection/scripts/merge_evidence_collection_outputs.ps1`
   - `evidence-collection/scripts/write_evidence_output.ps1`
   - `verification/scripts/write_decision_output.ps1`
-  - `skills-bigpoi-verfication/scripts/write_result_bundle.ps1`
-  - `skills-bigpoi-verfication/scripts/validate_result_bundle.ps1`
+  - `skills-bigpoi-verification/scripts/write_result_bundle.ps1`
+  - `skills-bigpoi-verification/scripts/validate_result_bundle.ps1`
 
 ### 验证 (Verified)
 
@@ -96,12 +97,12 @@
 - **主要变更文件**：
   - `evidence-collection/scripts/*.py`
   - `verification/scripts/write_decision_output.py`
-  - `skills-bigpoi-verfication/scripts/bundle_common.py`
-  - `skills-bigpoi-verfication/scripts/write_result_bundle.py`
-  - `skills-bigpoi-verfication/scripts/validate_result_bundle.py`
+  - `skills-bigpoi-verification/scripts/bundle_common.py`
+  - `skills-bigpoi-verification/scripts/write_result_bundle.py`
+  - `skills-bigpoi-verification/scripts/validate_result_bundle.py`
   - `evidence-collection/SKILL.md`
   - `verification/SKILL.md`
-  - `skills-bigpoi-verfication/SKILL.md`
+  - `skills-bigpoi-verification/SKILL.md`
 
 ---
 ## [1.5.0] - 2026-03-05
@@ -110,7 +111,7 @@
 
 - **职责划分明确**：修复文档歧义导致的 record 格式错误问题
   - `verification/SKILL.md`：明确子技能只输出决策结构（decision.schema.json），不生成入库记录
-  - `skills-bigpoi-verfication/SKILL.md`：明确主技能负责整合生成入库记录（record.schema.json）
+  - `skills-bigpoi-verification/SKILL.md`：明确主技能负责整合生成入库记录（record.schema.json）
   - 消除文档中的职责重叠，避免 LLM 输出格式混乱
 
 - **字段命名统一**：统一 input.schema 和 record.schema 中的字段命名
@@ -137,7 +138,7 @@
 
 - **主要修改文件**：
   - `verification/SKILL.md` - 明确输出职责
-  - `skills-bigpoi-verfication/SKILL.md` - 明确主技能职责
+  - `skills-bigpoi-verification/SKILL.md` - 明确主技能职责
   - `schema/input.schema.json` - 统一字段命名，更新版本为 v1.2.0
   - `schema/record.schema.json` - 增加 city_adcode 字段，更新版本为 v1.2.0
 
@@ -277,7 +278,7 @@
 
 - **类型映射引用配置**：
   - `verification/config/type_mapping.yaml` - verification 技能的类型映射引用配置
-  - 指向父技能 `skills-bigpoi-verfication/config/poi_type_mapping.yaml`
+  - 指向父技能 `skills-bigpoi-verification/config/poi_type_mapping.yaml`
   - 用于分类正确性维度的核实：将输入类型代码映射到白名单类型进行校验
 
 - **配置使用说明**：
@@ -398,8 +399,8 @@
 - **变更背景**：
     针对模型未按流程规范执行，尝试按照父子技能的方式将技能拆分为细粒度技能，由父技能统一编排核实流程
 
-- **目录重组**：从单一的 `bigpoi-verfication` 目录拆分为多个结构化的子技能目录：
-  - `skills-bigpoi-verfication/`：主核实技能总入口（包含完整的schema、config、rules）
+- **目录重组**：从单一的 `bigpoi-verification` 目录拆分为多个结构化的子技能目录：
+  - `skills-bigpoi-verification/`：主核实技能总入口（包含完整的schema、config、rules）
   - `verfication/`：核实判定子技能
   - `evidence-collection/`：情报收集子技能
 
