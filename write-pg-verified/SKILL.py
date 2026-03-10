@@ -5,15 +5,18 @@
 
 功能：
 从上游技能生成的本地 JSON 文件读取核实结果，
-批量回写到 PostgreSQL 的 poi_verified 成果表，
-同时更新 poi_init 原始表状态为“已核实”。
+批量回写到 PostgreSQL 的核实成果表，
+同时更新原始表状态为“已核实”。
 
 输入模式：
 通过 task_id 和 search_directory 参数自动查找索引文件并执行回库。
 如果同一个 task_id 因重试产生多个 index 文件，则优先使用最新修改时间的文件。
+
+可选参数：
+- init: 原始表名，默认 poi_init
+- verified: 核实成果表名，默认 poi_verified
 """
 
-import glob
 import io
 import json
 import sys
@@ -34,46 +37,40 @@ logger = get_logger(__name__)
 
 
 def find_index_file_by_task_id(task_id: str, search_directory: str) -> Optional[str]:
-    """
-    在指定搜索目录下查找包含指定 task_id 的索引文件。
-
-    如果匹配到多个索引文件，则按文件最后修改时间选择最新的一个，
-    以兼容调度重试后保留多份 index 文件的场景。
-    """
+    """在指定搜索目录下查找包含指定 task_id 的索引文件。"""
     search_dir = Path(search_directory)
     if not search_dir.exists():
         logger.error(f"搜索目录不存在: {search_directory}")
         return None
 
-    index_patterns = [
-        search_dir / "**" / f"index_{task_id}.json",
-        search_dir / "**" / f"index*{task_id}*.json",
-        search_dir / "**" / "index*.json",
+    candidate_files = [
+        *search_dir.rglob(f"index_{task_id}.json"),
+        *search_dir.rglob(f"index*{task_id}*.json"),
+        *search_dir.rglob("index*.json"),
     ]
 
     matched_index_files: List[Tuple[float, str]] = []
     visited_files = set()
 
-    for pattern in index_patterns:
-        for index_file in glob.glob(str(pattern), recursive=True):
-            normalized_path = str(Path(index_file).resolve())
-            if normalized_path in visited_files:
+    for index_file in candidate_files:
+        normalized_path = str(index_file.resolve())
+        if normalized_path in visited_files:
+            continue
+        visited_files.add(normalized_path)
+
+        try:
+            with open(index_file, "r", encoding="utf-8") as f:
+                index_data = json.load(f)
+
+            if index_data.get("task_id") != task_id:
                 continue
-            visited_files.add(normalized_path)
 
-            try:
-                with open(index_file, "r", encoding="utf-8") as f:
-                    index_data = json.load(f)
-
-                if index_data.get("task_id") != task_id:
-                    continue
-
-                modified_time = Path(index_file).stat().st_mtime
-                matched_index_files.append((modified_time, normalized_path))
-            except (json.JSONDecodeError, IOError) as e:
-                logger.warning(f"无法读取索引文件 {index_file}: {e}")
-            except OSError as e:
-                logger.warning(f"无法获取索引文件时间戳 {index_file}: {e}")
+            modified_time = index_file.stat().st_mtime
+            matched_index_files.append((modified_time, normalized_path))
+        except (json.JSONDecodeError, IOError) as e:
+            logger.warning(f"无法读取索引文件 {index_file}: {e}")
+        except OSError as e:
+            logger.warning(f"无法获取索引文件时间戳 {index_file}: {e}")
 
     if not matched_index_files:
         logger.warning(f"未找到 task_id={task_id} 的索引文件")
@@ -91,27 +88,23 @@ def find_index_file_by_task_id(task_id: str, search_directory: str) -> Optional[
     return latest_index_file
 
 
-def execute(data: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
-    """
-    执行单条 POI 核实结果写入。
-
-    推荐输入：
-    {
-        "task_id": "TASK_20260227_001",
-        "search_directory": "output/results"
-    }
-
-    兼容输入：
-    {
-        "task_id": "TASK_20260227_001",
-        "index_file": "output/results/TASK_20260227_001/index.json"
-    }
-    """
+def execute(
+    data: Optional[Dict[str, Any]] = None,
+    init: Optional[str] = None,
+    verified: Optional[str] = None,
+    **kwargs,
+) -> Dict[str, Any]:
+    """执行单条 POI 核实结果写入。"""
     if data is None:
         return {
             "success": False,
             "error": "缺少必要的输入数据",
         }
+
+    if init is not None:
+        data["init"] = init
+    if verified is not None:
+        data["verified"] = verified
 
     if "task_id" not in data:
         return {
@@ -144,6 +137,10 @@ def execute(data: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
         "task_id": task_id,
         "index_file": index_file,
     }
+    if "init" in data:
+        write_data["init"] = data["init"]
+    if "verified" in data:
+        write_data["verified"] = data["verified"]
 
     writer = None
     try:
@@ -175,15 +172,11 @@ def execute(data: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
 def execute_batch(
     data_list: Optional[List[Dict]] = None,
     search_directory: Optional[str] = None,
+    init: Optional[str] = None,
+    verified: Optional[str] = None,
     **kwargs,
 ) -> Dict[str, Any]:
-    """
-    批量执行 POI 核实结果写入。
-
-    支持两种输入：
-    1. task_id 列表 + search_directory
-    2. 包含 task_id 和 search_directory/index_file 的完整数据列表
-    """
+    """批量执行 POI 核实结果写入。"""
     if data_list is None or not isinstance(data_list, list):
         return {
             "success": False,
@@ -247,12 +240,16 @@ def execute_batch(
             else:
                 index_file = item["index_file"]
 
-            write_data_list.append(
-                {
-                    "task_id": task_id,
-                    "index_file": index_file,
-                }
-            )
+            write_item = {
+                "task_id": task_id,
+                "index_file": index_file,
+            }
+            if item.get("init") or init:
+                write_item["init"] = item.get("init") or init
+            if item.get("verified") or verified:
+                write_item["verified"] = item.get("verified") or verified
+
+            write_data_list.append(write_item)
 
         result = writer.write_batch(write_data_list)
         logger.info(

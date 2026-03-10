@@ -2,6 +2,34 @@
 
 本文件用于记录 `bigpoi-verification` skill 包的所有重大变更、修复与改进。
 
+## [1.6.4] - 2026-03-10
+
+### 修复 (Fixed) - write-pg-verified 兼容隐藏目录中的 index 检索
+
+- **索引遍历改为 Path.rglob**：将 `write-pg-verified/SKILL.py` 中基于 `glob.glob` 的递归查找改为 `Path.rglob(...)`，确保 Linux 下输入目录中的 `.claude` 等隐藏目录也能正常检索到候选 `index*.json` 文件。
+- **技能文档补充说明**：更新 `write-pg-verified/SKILL.md`，明确隐藏目录场景同样受支持，避免在重试或中间产物落到隐藏目录时出现漏检。
+
+### 影响范围
+
+- `write-pg-verified/SKILL.py`
+- `write-pg-verified/SKILL.md`
+
+---
+## [1.6.3] - 2026-03-10
+
+### 变更 (Changed) - write-pg-verified 支持可配置回库表名
+
+- **回库表名参数化**：将原始表和核实成果表从代码中的硬编码改为可传参数，新增 `init` 和 `verified` 两个入参；默认仍分别使用 `poi_init` 和 `poi_verified`，因此现有调用无需修改。
+- **SQL 表名安全拼接**：在 `write-pg-verified/scripts/db_writer.py` 中对传入表名增加标识符校验，并使用安全的 SQL Identifier 方式构造查询，避免把可配表名变成字符串拼接风险。
+- **技能文档同步更新**：更新 `write-pg-verified/SKILL.md`，补充表名覆盖方式、默认值和 schema 形式示例。
+
+### 影响范围
+
+- `write-pg-verified/SKILL.py`
+- `write-pg-verified/scripts/db_writer.py`
+- `write-pg-verified/SKILL.md`
+
+---
 ## [1.6.2] - 2026-03-10
 
 ### 修复 (Fixed) - write-pg-verified 重试场景下的 index 选择错误
