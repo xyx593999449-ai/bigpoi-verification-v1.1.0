@@ -41,6 +41,7 @@ description: 面向大 POI 核实任务的父技能。用于编排 `evidence-col
 
 - `evidence-collection` 必须交付正式 `evidence_path`
 - `evidence-collection` 内部可以并行跑图商代理、`websearch`、`webfetch` 和缺失图商补采，但这些都只能作为中间 JSON 工件存在
+- `evidence-collection` 产生的原始结果、review 结果和归并中间文件都只能作为过程文件，不能命名为正式 `evidence_*.json`，也不能进入最终 `index_*.json`
 - `verification` 必须读取这个 `evidence_path`，不得接收模糊的内联 evidence
 - `verification` 必须交付正式 `decision_path`
 
@@ -75,6 +76,8 @@ python skills-bigpoi-verfication/scripts/validate_result_bundle.py -TaskDir <out
 - `evidence_<timestamp>.json`
 - `record_<timestamp>.json`
 - `index_<timestamp>.json`
+
+过程文件可以存在于 `output/` 下的独立过程目录，但不属于最终交付目录约束的一部分，也不得被写入 `index.files`。
 
 约束：
 

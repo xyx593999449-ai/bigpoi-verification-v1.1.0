@@ -2,6 +2,33 @@
 
 本文件用于记录 `bigpoi-verification` skill 包的所有重大变更、修复与改进。
 
+## [1.6.1] - 2026-03-10
+
+### 新增 (Added) - 图商相关性初筛稳定化
+
+- **新增图商相关性初筛写入脚本**：补充 `evidence-collection/scripts/write_map_relevance_review.py`，用于将模型给出的图商候选保留/剔除判断写成稳定的 reviewed JSON，避免将 query 误召回结果直接归并进正式 evidence
+
+### 变更 (Changed) - 技能文档与成果文件命名约束
+
+- **技能文件名统一为 `SKILL.md`**：将正式技能文档统一收敛为 Claude Code 规范要求的 `SKILL.md` 命名
+  - `evidence-collection/SKILL.md`
+  - `skills-bigpoi-verfication/SKILL.md`
+  - `verification/SKILL.md`
+- **正式 evidence 命名口径收紧**：明确只有完成相关性初筛、归并和规范化之后的最终证据文件，才能命名为 `evidence_<timestamp>.json`
+- **过程文件命名与索引约束补充**：原始检索结果、图商原始结果、review 结果与归并中间结果统一视为过程文件，必须使用过程命名，不得进入最终 `index`
+- **父技能交付边界同步更新**：父技能文档同步声明过程文件只能存在于 `output/` 下的过程目录中，不属于正式交付目录的一部分
+- **README 同步更新**：补充 Claude Code 技能目录规范、正式文件与过程文件的命名区别，以及部署时的交付约束
+
+### 影响范围
+
+- **主要修改文件**：
+  - `README.md`
+  - `evidence-collection/SKILL.md`
+  - `skills-bigpoi-verfication/SKILL.md`
+  - `verification/SKILL.md`
+  - `evidence-collection/scripts/write_map_relevance_review.py`
+
+---
 ## [1.6.0] - 2026-03-09
 
 ### 新增 (Added) - 结果稳定化与脚本化产物

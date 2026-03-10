@@ -153,6 +153,9 @@ output/results/{task_id}/
 其中：
 
 - `timestamp` 格式固定为 `yyyyMMddTHHmmssZ`
+- 只有最终初筛并规范化后的正式证据文件才能命名为 `evidence_<timestamp>.json`
+- 原始检索结果、抓取结果、图商原始结果、图商 review 结果和归并中间结果都属于过程文件，必须使用过程命名，例如 `websearch-raw-<timestamp>.json`、`webfetch-raw-<timestamp>.json`、`map-raw-<branch>-<timestamp>.json`、`map-reviewed-<branch>-<timestamp>.json`、`collector-merged-<timestamp>.json`
+- 过程文件可以放在 `output/` 下，但不能进入最终 `index`，也不能冒用正式结果文件名
 - `index` 为最终对外交付入口
 - 最终必须通过 `validate_result_bundle.py` 校验
 
