@@ -19,6 +19,7 @@ from bundle_common import (
     read_json_file,
     test_bundle_name,
 )
+from runtime_paths import build_task_dir, detect_workspace_root
 
 
 def add_error(errors: list[str], message: str) -> None:
@@ -125,7 +126,7 @@ def validate_record(record: dict, errors: list[str]) -> None:
                     add_error(errors, f"record.audit_trail.{field} is required")
 
 
-def validate_index(index: dict, task_dir: Path, poi_id: str, task_id: str, errors: list[str]) -> None:
+def validate_index(index: dict, task_dir: Path, workspace_root: Path, poi_id: str, task_id: str, errors: list[str]) -> None:
     for field in ("poi_id", "task_id", "created_at", "task_dir", "files", "description"):
         if field not in index:
             add_error(errors, f"index.{field} is required")
@@ -135,6 +136,9 @@ def validate_index(index: dict, task_dir: Path, poi_id: str, task_id: str, error
         add_error(errors, "index.task_id must match task directory name")
     if "created_at" in index and not is_iso_time(str(index["created_at"])):
         add_error(errors, "index.created_at must be ISO datetime")
+    expected_task_dir = build_task_dir(workspace_root, task_id).resolve()
+    if task_dir.resolve() != expected_task_dir:
+        add_error(errors, "task_dir must resolve under workspace_root/output/results/{task_id}")
     if "task_dir" in index and str(index["task_dir"]) != f"output/results/{task_id}":
         add_error(errors, "index.task_dir must match output/results/{task_id}")
     files = index.get("files")
@@ -163,6 +167,7 @@ def main() -> int:
     ensure_stdout_utf8()
     parser = argparse.ArgumentParser()
     parser.add_argument("-TaskDir", required=True)
+    parser.add_argument("-WorkspaceRoot")
     args = parser.parse_args()
 
     errors: list[str] = []
@@ -188,6 +193,12 @@ def main() -> int:
 
     resolved_task_dir = task_dir.resolve()
     task_id = resolved_task_dir.name
+    workspace_detection = detect_workspace_root(
+        workspace_hint=args.WorkspaceRoot,
+        related_paths=(resolved_task_dir,),
+        cwd=Path.cwd(),
+    )
+    workspace_root = workspace_detection.workspace_root.resolve()
     index_info = find_latest_index(resolved_task_dir)
     if index_info is None:
         errors.append("task_dir does not contain index_*.json")
@@ -274,7 +285,7 @@ def main() -> int:
     else:
         errors.append("evidence file is missing")
 
-    validate_index(index, resolved_task_dir, poi_id, task_id, errors)
+    validate_index(index, resolved_task_dir, workspace_root, poi_id, task_id, errors)
 
     failed_stage = "complete"
     if any(message.startswith("evidence") for message in errors):
@@ -299,6 +310,12 @@ def main() -> int:
         "retry_action": retry_action,
         "task_dir": str(resolved_task_dir),
         "task_id": task_id,
+        "workspace_root": str(workspace_root),
+        "workspace_detection": {
+            "strategy": workspace_detection.strategy,
+            "matched_marker": workspace_detection.matched_marker,
+            "start_path": str(workspace_detection.start_path),
+        },
         "index_path": str(index_path),
         "files": {
             "decision": str(decision_path) if decision_path else "",

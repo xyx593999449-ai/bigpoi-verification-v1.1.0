@@ -1,6 +1,25 @@
 # 更新履历 (CHANGELOG)
 
 本文件用于记录 `bigpoi-verification` skill 包的所有重大变更、修复与改进。
+## [1.6.5] - 2026-03-10
+
+### 变更 (Changed) - 父技能结果目录自动探测与跨系统路径约束
+
+- **新增工作区根目录探测模块**：新增 `skills-bigpoi-verification/scripts/runtime_paths.py`，支持从显式 `WorkspaceRoot`、输入文件路径和当前工作目录出发，向上逐级查找 `.claude`、`.openclaw`、`.git` 来推断业务工作区根目录。
+- **父技能结果写入改为基于工作区探测**：`write_result_bundle.py` 不再默认按技能安装目录反推输出根目录，而是统一写入探测到的 `workspace_root/output/results/{task_id}`。
+- **最终校验增加工作区约束**：`validate_result_bundle.py` 现在会校验 `task_dir` 是否位于正确的 `workspace_root/output/results/{task_id}` 下，避免 Linux 或多应用安装场景下结果写入错误目录仍然通过校验。
+- **文档同步更新**：补充父技能 `WorkspaceRoot` 的显式传参与自动探测规则，并说明当前仍保留 `index.files.*` 绝对路径合同。
+
+### 影响范围
+
+- `skills-bigpoi-verification/scripts/runtime_paths.py`
+- `skills-bigpoi-verification/scripts/write_result_bundle.py`
+- `skills-bigpoi-verification/scripts/validate_result_bundle.py`
+- `skills-bigpoi-verification/SKILL.md`
+- `README.md`
+
+---
+
 
 ## [1.6.4] - 2026-03-10
 

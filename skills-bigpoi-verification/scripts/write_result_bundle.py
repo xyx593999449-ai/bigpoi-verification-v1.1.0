@@ -23,6 +23,7 @@ from bundle_common import (
     validate_basic_input,
     write_json_file,
 )
+from runtime_paths import build_task_dir, detect_workspace_root
 
 
 def main() -> int:
@@ -34,7 +35,12 @@ def main() -> int:
     parser.add_argument("-WorkspaceRoot")
     args = parser.parse_args()
 
-    workspace_root = Path(args.WorkspaceRoot).resolve() if args.WorkspaceRoot else SCRIPT_DIR.parent.parent.resolve()
+    workspace_detection = detect_workspace_root(
+        workspace_hint=args.WorkspaceRoot,
+        related_paths=(args.InputPath, args.EvidencePath, args.DecisionPath),
+        cwd=Path.cwd(),
+    )
+    workspace_root = workspace_detection.workspace_root
     input_data = normalize_input(read_json_file(args.InputPath))
     evidence = read_json_file(args.EvidencePath)
     decision = read_json_file(args.DecisionPath)
@@ -50,7 +56,7 @@ def main() -> int:
 
     task_id = str(input_data.get("task_id") or f"TASK_{input_data['id']}")
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    task_dir = workspace_root / "output" / "results" / task_id
+    task_dir = build_task_dir(workspace_root, task_id)
     task_dir.mkdir(parents=True, exist_ok=True)
 
     decision_out = task_dir / f"decision_{timestamp}.json"
@@ -87,7 +93,14 @@ def main() -> int:
         raise FileNotFoundError("validate_result_bundle.py is missing")
 
     completed = subprocess.run(
-        [sys.executable, str(validator), "-TaskDir", str(task_dir)],
+        [
+            sys.executable,
+            str(validator),
+            "-TaskDir",
+            str(task_dir),
+            "-WorkspaceRoot",
+            str(workspace_root),
+        ],
         check=False,
         capture_output=True,
         text=True,
@@ -103,6 +116,12 @@ def main() -> int:
     result = {
         "status": "ok",
         "task_id": task_id,
+        "workspace_root": str(workspace_root),
+        "workspace_detection": {
+            "strategy": workspace_detection.strategy,
+            "matched_marker": workspace_detection.matched_marker,
+            "start_path": str(workspace_detection.start_path),
+        },
         "task_dir": str(task_dir.resolve()),
         "files": {
             "decision": str(decision_out.resolve()),

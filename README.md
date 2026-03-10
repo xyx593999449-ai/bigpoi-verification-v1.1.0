@@ -18,6 +18,7 @@
 - `verification/scripts/write_decision_output.py`
 - `skills-bigpoi-verification/scripts/write_result_bundle.py`
 - `skills-bigpoi-verification/scripts/validate_result_bundle.py`
+- `skills-bigpoi-verification/scripts/runtime_paths.py`
 
 ## Claude Code 技能配置方式
 
@@ -159,6 +160,16 @@ output/results/{task_id}/
 - `index` 为最终对外交付入口
 - 最终必须通过 `validate_result_bundle.py` 校验
 
+## 工作区路径推演
+
+父技能结果落盘优先使用显式传入的 `WorkspaceRoot`；如果未传，则从 `workspace` 提示、输入文件路径和当前工作目录出发，向上逐级查找 `.claude`、`.openclaw`、`.git`，以最近命中的目录作为 `workspace_root`。最终结果固定落到 `workspace_root/output/results/{task_id}`。
+
+当前正式结果合同保持不变：
+
+- `index.task_dir` 仍为 `output/results/{task_id}`
+- `index.files.*` 仍为绝对路径
+- `validate_result_bundle.py` 会额外校验这些绝对路径必须位于探测到的 `workspace_root/output/results/{task_id}` 下
+
 ## 环境要求
 
 ### 必需环境
@@ -257,7 +268,7 @@ python verification/scripts/write_decision_output.py -PoiPath <input.json> -Evid
 
 ```bash
 python skills-bigpoi-verification/scripts/write_result_bundle.py -InputPath <input.json> -EvidencePath <evidence-file.json> -DecisionPath <decision.json> -WorkspaceRoot <repo-root>
-python skills-bigpoi-verification/scripts/validate_result_bundle.py -TaskDir <output/results/{task_id}>
+python skills-bigpoi-verification/scripts/validate_result_bundle.py -TaskDir <output/results/{task_id}> -WorkspaceRoot <repo-root>
 ```
 
 ## 当前建议

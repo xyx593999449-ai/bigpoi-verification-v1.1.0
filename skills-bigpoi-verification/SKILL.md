@@ -21,6 +21,7 @@ description: 面向大 POI 核实任务的父技能。用于编排 `evidence-col
 
 - `skills-bigpoi-verification/scripts/write_result_bundle.py`
 - `skills-bigpoi-verification/scripts/validate_result_bundle.py`
+- `skills-bigpoi-verification/scripts/runtime_paths.py`
 
 禁止行为：
 
@@ -59,7 +60,7 @@ python skills-bigpoi-verification/scripts/write_result_bundle.py -InputPath <inp
 5. 对脚本生成的任务目录执行最终规格校验：
 
 ```bash
-python skills-bigpoi-verification/scripts/validate_result_bundle.py -TaskDir <output/results/{task_id}>
+python skills-bigpoi-verification/scripts/validate_result_bundle.py -TaskDir <output/results/{task_id}> -WorkspaceRoot <repo-root>
 ```
 
 6. 只有在校验脚本返回 `status = passed` 时，才能把任务标记为完成，并向下游暴露 `index` 文件路径。
