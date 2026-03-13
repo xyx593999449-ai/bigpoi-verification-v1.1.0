@@ -22,6 +22,7 @@ description: 面向大 POI 核实任务的父技能。用于编排 `evidence-col
 - `skills-bigpoi-verification/scripts/write_result_bundle.py`
 - `skills-bigpoi-verification/scripts/validate_result_bundle.py`
 - `skills-bigpoi-verification/scripts/runtime_paths.py`
+- `skills-bigpoi-verification/scripts/init_run_context.py`
 
 禁止行为：
 
@@ -48,22 +49,27 @@ description: 面向大 POI 核实任务的父技能。用于编排 `evidence-col
 
 ## Workflow
 
-1. 读取输入并检查是否属于大 POI 范围。
-2. 调用 `evidence-collection`，让其先完成并行采集、图商原始结果相关性初筛、缺失图商补采、补采结果初筛、归并规范化，再通过 `write_evidence_output.py` 生成正式 `evidence_*.json` 文件。
-3. 调用 `verification`，输入是 `input 文件 + evidence_path`，产出唯一正式产物 `decision_*.json`。
-4. 运行以下脚本生成最终输出包：
+1. 先运行 `init_run_context.py` 初始化本次 `run_id`、`output/runs/{run_id}/process/` 与 `output/runs/{run_id}/staging/`。
+2. 读取输入并检查是否属于大 POI 范围。
+3. 调用 `evidence-collection`，让其先完成并行采集、图商原始结果相关性初筛、缺失图商补采、补采结果初筛、归并规范化，再通过 `write_evidence_output.py` 生成正式 `evidence_*.json` 文件。
+4. 调用 `verification`，输入是 `input 文件 + evidence_path`，产出唯一正式产物 `decision_*.json`。
+5. 运行以下脚本生成最终输出包：
 
 ```bash
 python skills-bigpoi-verification/scripts/write_result_bundle.py -InputPath <input.json> -EvidencePath <evidence-file.json> -DecisionPath <decision.json> -WorkspaceRoot <repo-root>
 ```
 
-5. 对脚本生成的任务目录执行最终规格校验：
+6. 对脚本生成的任务目录执行最终规格校验：
 
 ```bash
 python skills-bigpoi-verification/scripts/validate_result_bundle.py -TaskDir <output/results/{task_id}> -WorkspaceRoot <repo-root>
 ```
 
-6. 只有在校验脚本返回 `status = passed` 时，才能把任务标记为完成，并向下游暴露 `index` 文件路径。
+7. 只有在校验脚本返回 `status = passed` 时，才能把任务标记为完成，并向下游暴露 `index` 文件路径。
+
+```bash
+python skills-bigpoi-verification/scripts/init_run_context.py -InputPath <input.json> -WorkspaceRoot <repo-root>
+```
 
 ## Final output contract
 

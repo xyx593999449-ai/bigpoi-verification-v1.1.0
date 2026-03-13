@@ -7,9 +7,13 @@ import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parents[1]
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
+from run_context import attach_context, get_context, require_context
 from evidence_collection_common import ensure_stdout_utf8, read_json_file, utc_iso_now, write_json_file
 
 
@@ -158,6 +162,9 @@ def main() -> int:
     parser.add_argument("-RawMapPath", required=True)
     parser.add_argument("-ReviewSeedPath", required=True)
     parser.add_argument("-OutputPath", required=True)
+    parser.add_argument("-PoiId")
+    parser.add_argument("-TaskId")
+    parser.add_argument("-RunId")
     args = parser.parse_args()
 
     raw_payload = read_json_file(args.RawMapPath)
@@ -166,6 +173,12 @@ def main() -> int:
         raise ValueError("raw map payload must be an object")
     if not isinstance(review_seed, dict):
         raise ValueError("review seed must be an object")
+
+    raw_context = require_context(raw_payload, label="raw_map", expected_poi_id=args.PoiId, expected_run_id=args.RunId, allow_missing=not bool(args.PoiId or args.RunId))
+    review_context = require_context(review_seed, label="review_seed", expected_poi_id=args.PoiId or (raw_context or {}).get("poi_id"), expected_run_id=args.RunId or (raw_context or {}).get("run_id"), allow_missing=True)
+    resolved_run_id = str(args.RunId or (review_context or {}).get("run_id") or (raw_context or {}).get("run_id") or "").strip()
+    resolved_poi_id = str(args.PoiId or (review_context or {}).get("poi_id") or (raw_context or {}).get("poi_id") or "").strip()
+    resolved_task_id = str(args.TaskId or (review_context or {}).get("task_id") or (raw_context or {}).get("task_id") or "").strip()
 
     raw_vendors = extract_vendor_payloads(raw_payload)
     review_map = extract_review_map(review_seed)
@@ -180,11 +193,14 @@ def main() -> int:
         summaries[vendor] = summary
 
     output = build_output(raw_payload, reviewed_vendors, summaries)
+    if resolved_run_id and resolved_poi_id:
+        output = attach_context(output, resolved_run_id, resolved_poi_id, task_id=resolved_task_id or None)
     write_json_file(output, args.OutputPath)
 
     result = {
         "status": "ok",
         "result_path": str(Path(args.OutputPath).resolve()),
+        "run_id": resolved_run_id,
         "vendors": {vendor: {"kept_count": data["kept_count"], "dropped_count": data["dropped_count"]} for vendor, data in summaries.items()},
     }
     json.dump(result, sys.stdout, ensure_ascii=False, indent=2)

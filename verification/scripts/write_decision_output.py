@@ -9,6 +9,13 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from run_context import collect_item_run_ids, require_context
+
 
 def ensure_stdout_utf8() -> None:
     if hasattr(sys.stdout, "reconfigure"):
@@ -97,12 +104,18 @@ def validate_input(poi: dict, errors: list[str]) -> None:
                     add_error(errors, f"input.coordinates.{field} is required")
 
 
-def validate_evidence(evidence, poi_id: str, errors: list[str]) -> None:
+def validate_evidence(evidence, poi_id: str, expected_run_id: str, errors: list[str]) -> None:
     if not isinstance(evidence, list):
         add_error(errors, "evidence must be an array")
         return
     if not evidence:
         add_error(errors, "evidence array cannot be empty")
+        return
+    item_run_ids = collect_item_run_ids(evidence)
+    if not item_run_ids:
+        add_error(errors, "evidence.metadata.run_id is required for all items")
+    elif item_run_ids != {expected_run_id}:
+        add_error(errors, "evidence item run_id must match the current run")
     for index, item in enumerate(evidence):
         if not isinstance(item, dict):
             add_error(errors, f"evidence[{index}] must be an object")
@@ -114,6 +127,11 @@ def validate_evidence(evidence, poi_id: str, errors: list[str]) -> None:
             add_error(errors, f"evidence[{index}].poi_id must match input id")
         if "collected_at" in item and not is_iso_time(str(item["collected_at"])):
             add_error(errors, f"evidence[{index}].collected_at must be ISO datetime")
+        metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else None
+        if metadata is None:
+            add_error(errors, f"evidence[{index}].metadata is required")
+        elif str(metadata.get("run_id") or "").strip() != expected_run_id:
+            add_error(errors, f"evidence[{index}].metadata.run_id must match the current run")
         source = item.get("source")
         if source is not None:
             if not isinstance(source, dict):
@@ -211,6 +229,8 @@ def main() -> int:
     parser.add_argument("-EvidencePath", required=True)
     parser.add_argument("-DecisionSeedPath", required=True)
     parser.add_argument("-OutputDirectory", required=True)
+    parser.add_argument("-RunId")
+    parser.add_argument("-TaskId")
     args = parser.parse_args()
 
     errors: list[str] = []
@@ -225,7 +245,16 @@ def main() -> int:
 
     validate_input(poi, errors)
     poi_id = str(poi.get("id") or "")
-    validate_evidence(evidence, poi_id, errors)
+    seed_context = require_context(seed, label="decision_seed", expected_poi_id=poi_id, expected_run_id=args.RunId, allow_missing=False)
+    resolved_run_id = str(args.RunId or (seed_context or {}).get("run_id") or "").strip()
+    if not resolved_run_id:
+        add_error(errors, "decision_seed.context.run_id is required")
+    resolved_task_id = str(args.TaskId or poi.get("task_id") or (seed_context or {}).get("task_id") or "").strip()
+    validate_evidence(evidence, poi_id, resolved_run_id, errors)
+
+    processed_at = str(seed.get("processed_at") or "")
+    if processed_at and not is_iso_time(processed_at):
+        add_error(errors, "seed.processed_at must be ISO datetime")
 
     dimensions = seed.get("dimensions")
     if not isinstance(dimensions, dict):
@@ -253,7 +282,7 @@ def main() -> int:
     action = str(overall_seed.get("action", get_action(status)))
     summary = str(overall_seed.get("summary", get_summary(status, overall_confidence, dimensions)))
 
-    hash_source = f"{poi_id}|{stamp}|decision".encode("utf-8")
+    hash_source = f"{poi_id}|{resolved_run_id}|{stamp}|decision".encode("utf-8")
     short_hash = hashlib.sha256(hash_source).hexdigest()[:8].upper()
 
     distribution = {"official": 0, "map_vendor": 0, "internet": 0}
@@ -273,6 +302,7 @@ def main() -> int:
     decision = {
         "decision_id": f"DEC_{stamp}_{short_hash}",
         "poi_id": poi_id,
+        "run_id": resolved_run_id,
         "overall": {
             "status": status,
             "confidence": round(overall_confidence, 4),
@@ -287,9 +317,15 @@ def main() -> int:
             "source_distribution": distribution,
         },
         "created_at": created_at,
-        "processed_at": str(seed.get("processed_at") or created_at),
+        "processed_at": processed_at or created_at,
         "processing_duration_ms": int(seed.get("processing_duration_ms", 0)),
         "version": str(seed.get("version") or "1.6.0"),
+        "metadata": prune_empty(
+            {
+                "task_id": resolved_task_id,
+                "seed_created_at": (seed_context or {}).get("created_at"),
+            }
+        ),
     }
     if "downgrade_info" in seed:
         decision["downgrade_info"] = seed["downgrade_info"]
@@ -307,6 +343,7 @@ def main() -> int:
         "decision_path": str(output_path.resolve()),
         "decision_id": decision["decision_id"],
         "poi_id": poi_id,
+        "run_id": resolved_run_id,
     }
     json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")

@@ -7,9 +7,13 @@ import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parents[1]
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
+from run_context import attach_context, collect_item_run_ids, require_context, set_item_run_context
 from evidence_collection_common import (
     ensure_stdout_utf8,
     finalize_evidence_seed,
@@ -41,6 +45,8 @@ def main() -> int:
     parser.add_argument("-WebFetchPath")
     parser.add_argument("-VendorFallbackPaths", nargs="*")
     parser.add_argument("-OutputPath", required=True)
+    parser.add_argument("-RunId")
+    parser.add_argument("-TaskId")
     args = parser.parse_args()
 
     poi = normalize_input_poi(read_json_file(args.PoiPath))
@@ -49,6 +55,8 @@ def main() -> int:
             raise ValueError(f"input.{field} is required")
 
     errors: list[str] = []
+    resolved_run_id = str(args.RunId or "").strip()
+    resolved_task_id = str(args.TaskId or poi.get("task_id") or "").strip()
     evidence_seeds: list[dict] = []
     branch_summary = {
         "internal_proxy": {"amap": 0, "bmap": 0, "qmap": 0},
@@ -60,6 +68,11 @@ def main() -> int:
     fallback_recovered: set[str] = set()
 
     internal_payload = read_json_file(args.InternalProxyPath)
+    internal_context = require_context(internal_payload, label="internal_proxy", expected_poi_id=str(poi["id"]), expected_run_id=resolved_run_id or None, allow_missing=not bool(resolved_run_id))
+    if not resolved_run_id and internal_context is not None:
+        resolved_run_id = str(internal_context.get("run_id") or "").strip()
+    if not resolved_task_id and internal_context is not None:
+        resolved_task_id = str(internal_context.get("task_id") or "").strip()
     if not isinstance(internal_payload, dict) or not isinstance(internal_payload.get("vendors"), dict):
         raise ValueError("internal proxy output must contain vendors")
 
@@ -83,6 +96,11 @@ def main() -> int:
         if not normalize_whitespace(fallback_path):
             continue
         payload = read_json_file(fallback_path)
+        fallback_context = require_context(payload, label=f"vendor_fallback[{fallback_path}]", expected_poi_id=str(poi["id"]), expected_run_id=resolved_run_id or None, allow_missing=not bool(resolved_run_id))
+        if not resolved_run_id and fallback_context is not None:
+            resolved_run_id = str(fallback_context.get("run_id") or "").strip()
+        if not resolved_task_id and fallback_context is not None:
+            resolved_task_id = str(fallback_context.get("task_id") or "").strip()
         if not isinstance(payload, dict) or not normalize_whitespace(payload.get("vendor")):
             errors.append(f"vendor fallback output must contain vendor: {fallback_path}")
             continue
@@ -100,6 +118,11 @@ def main() -> int:
 
     if args.WebSearchPath:
         payload = read_json_file(args.WebSearchPath)
+        websearch_context = require_context(payload, label="websearch", expected_poi_id=str(poi["id"]), expected_run_id=resolved_run_id or None, allow_missing=not bool(resolved_run_id))
+        if not resolved_run_id and websearch_context is not None:
+            resolved_run_id = str(websearch_context.get("run_id") or "").strip()
+        if not resolved_task_id and websearch_context is not None:
+            resolved_task_id = str(websearch_context.get("task_id") or "").strip()
         items = get_generic_items(payload)
         branch_summary["websearch"] = len(items)
         for item in items:
@@ -111,6 +134,11 @@ def main() -> int:
 
     if args.WebFetchPath:
         payload = read_json_file(args.WebFetchPath)
+        webfetch_context = require_context(payload, label="webfetch", expected_poi_id=str(poi["id"]), expected_run_id=resolved_run_id or None, allow_missing=not bool(resolved_run_id))
+        if not resolved_run_id and webfetch_context is not None:
+            resolved_run_id = str(webfetch_context.get("run_id") or "").strip()
+        if not resolved_task_id and webfetch_context is not None:
+            resolved_task_id = str(webfetch_context.get("task_id") or "").strip()
         items = get_generic_items(payload)
         branch_summary["webfetch"] = len(items)
         for item in items:
@@ -135,7 +163,7 @@ def main() -> int:
     )
 
     timestamp = utc_timestamp()
-    final_evidence = [finalize_evidence_seed(seed, timestamp, index) for index, seed in enumerate(sorted_seeds)]
+    final_evidence = [finalize_evidence_seed(set_item_run_context(seed, resolved_run_id or None, resolved_task_id or None), timestamp, index) for index, seed in enumerate(sorted_seeds)]
 
     final_missing_vendors = [vendor for vendor in iter_unique(internal_missing_vendors) if vendor not in fallback_recovered]
     source_type_distribution = {"official": 0, "map_vendor": 0, "internet": 0, "user_contributed": 0, "other": 0}
@@ -154,14 +182,18 @@ def main() -> int:
             "final_missing_vendors": final_missing_vendors,
             "branch_counts": branch_summary,
             "source_type_distribution": source_type_distribution,
-            "evidence_count": len(final_evidence),
+            "run_id": resolved_run_id,
+        "evidence_count": len(final_evidence),
         },
     }
+    if resolved_run_id:
+        payload = attach_context(payload, resolved_run_id, str(poi["id"]), task_id=resolved_task_id or None)
     write_json_file(payload, args.OutputPath)
 
     result = {
         "status": "ok",
         "result_path": str(Path(args.OutputPath).resolve()),
+        "run_id": resolved_run_id,
         "evidence_count": len(final_evidence),
         "final_missing_vendors": final_missing_vendors,
     }

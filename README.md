@@ -18,6 +18,7 @@
 - `verification/scripts/write_decision_output.py`
 - `skills-bigpoi-verification/scripts/write_result_bundle.py`
 - `skills-bigpoi-verification/scripts/validate_result_bundle.py`
+- `skills-bigpoi-verification/scripts/init_run_context.py`
 - `skills-bigpoi-verification/scripts/runtime_paths.py`
 
 ## Claude Code 技能配置方式
@@ -160,6 +161,12 @@ output/results/{task_id}/
 - `index` 为最终对外交付入口
 - 最终必须通过 `validate_result_bundle.py` 校验
 
+## 运行隔离
+
+- 每条 POI 的一次 skill 执行都应生成独立 `run_id`
+- 所有过程文件统一落在 `output/runs/{run_id}/process/` 与 `output/runs/{run_id}/staging/`
+- `decision seed`、图商 raw/review、collector 中间结果都必须携带 `run_id`、`poi_id`、`created_at`
+
 ## 工作区路径推演
 
 父技能结果落盘优先使用显式传入的 `WorkspaceRoot`；如果未传，则从 `workspace` 提示、输入文件路径和当前工作目录出发，向上逐级查找 `.claude`、`.openclaw`、`.git`，以最近命中的目录作为 `workspace_root`。最终结果固定落到 `workspace_root/output/results/{task_id}`。
@@ -250,18 +257,19 @@ output/results/{task_id}/
 
 ```bash
 python evidence-collection/scripts/build_web_source_plan.py -PoiPath <input.json> -OutputPath <web-plan.json>
-python evidence-collection/scripts/call_internal_proxy.py -PoiName <poi-name> -City <city> -OutputPath <internal-proxy.json>
-python evidence-collection/scripts/write_map_relevance_review.py -RawMapPath <map-raw.json> -ReviewSeedPath <map-review-seed.json> -OutputPath <map-reviewed.json>
-python evidence-collection/scripts/call_map_vendor.py -PoiName <poi-name> -City <city> -Source <amap|bmap|qmap> -OutputPath <vendor-fallback.json>
-python evidence-collection/scripts/write_map_relevance_review.py -RawMapPath <vendor-fallback.json> -ReviewSeedPath <vendor-review-seed.json> -OutputPath <vendor-reviewed.json>
-python evidence-collection/scripts/merge_evidence_collection_outputs.py -PoiPath <input.json> -InternalProxyPath <map-reviewed-internal-proxy.json> -WebSearchPath <websearch.json> -WebFetchPath <webfetch.json> -VendorFallbackPaths <map-reviewed-vendor-a.json> <map-reviewed-vendor-b.json> -OutputPath <merged.json>
-python evidence-collection/scripts/write_evidence_output.py -PoiPath <input.json> -CollectorOutputPath <merged.json> -OutputDirectory <staging-dir>
+python skills-bigpoi-verification/scripts/init_run_context.py -InputPath <input.json> -WorkspaceRoot <repo-root>
+python evidence-collection/scripts/call_internal_proxy.py -PoiName <poi-name> -City <city> -PoiId <poi-id> -TaskId <task-id> -RunId <run-id> -OutputPath <output/runs/{run_id}/process/map-raw-internal-proxy.json>
+python evidence-collection/scripts/write_map_relevance_review.py -RawMapPath <map-raw.json> -ReviewSeedPath <map-review-seed.json> -OutputPath <output/runs/{run_id}/process/map-reviewed.json> -PoiId <poi-id> -TaskId <task-id> -RunId <run-id>
+python evidence-collection/scripts/call_map_vendor.py -PoiName <poi-name> -City <city> -Source <amap|bmap|qmap> -PoiId <poi-id> -TaskId <task-id> -RunId <run-id> -OutputPath <output/runs/{run_id}/process/map-raw-vendor.json>
+python evidence-collection/scripts/write_map_relevance_review.py -RawMapPath <vendor-fallback.json> -ReviewSeedPath <vendor-review-seed.json> -OutputPath <output/runs/{run_id}/process/map-reviewed-vendor.json> -PoiId <poi-id> -TaskId <task-id> -RunId <run-id>
+python evidence-collection/scripts/merge_evidence_collection_outputs.py -PoiPath <input.json> -InternalProxyPath <map-reviewed-internal-proxy.json> -WebSearchPath <websearch.json> -WebFetchPath <webfetch.json> -VendorFallbackPaths <map-reviewed-vendor-a.json> <map-reviewed-vendor-b.json> -OutputPath <output/runs/{run_id}/process/collector-merged.json> -RunId <run-id> -TaskId <task-id>
+python evidence-collection/scripts/write_evidence_output.py -PoiPath <input.json> -CollectorOutputPath <output/runs/{run_id}/process/collector-merged.json> -OutputDirectory <output/runs/{run_id}/staging> -RunId <run-id> -TaskId <task-id>
 ```
 
 ### 核实决策
 
 ```bash
-python verification/scripts/write_decision_output.py -PoiPath <input.json> -EvidencePath <evidence-file.json> -DecisionSeedPath <decision-seed.json> -OutputDirectory <staging-dir>
+python verification/scripts/write_decision_output.py -PoiPath <input.json> -EvidencePath <evidence-file.json> -DecisionSeedPath <output/runs/{run_id}/process/decision-seed.json> -OutputDirectory <output/runs/{run_id}/staging> -RunId <run-id> -TaskId <task-id>
 ```
 
 ### 结果成包与终检

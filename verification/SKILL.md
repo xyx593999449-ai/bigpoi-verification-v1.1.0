@@ -68,12 +68,16 @@ description: 面向大 POI 核实流程的子技能。用于基于输入 POI 文
 5. 运行脚本生成正式决策文件：
 
 ```bash
-python verification/scripts/write_decision_output.py -PoiPath <input.json> -EvidencePath <evidence-file.json> -DecisionSeedPath <decision-seed.json> -OutputDirectory <staging-dir>
+python verification/scripts/write_decision_output.py -PoiPath <input.json> -EvidencePath <evidence-file.json> -DecisionSeedPath <output/runs/{run_id}/process/decision-seed.json> -OutputDirectory <output/runs/{run_id}/staging> -RunId <run-id> -TaskId <task-id>
 ```
 
 6. 使用脚本返回的 `decision_path` 作为唯一正式输出路径。
 
 ## Decision seed requirements
+
+- `decision seed` 必须包含顶层 `context`，至少包含 `run_id`、`poi_id`、`created_at`，可选 `task_id`
+- `decision seed` 必须写入 `output/runs/{run_id}/process/` 下的本次运行独立文件，不允许复用共享固定文件名
+- 只有在 `decision seed` 写入成功且内容合法后，才能继续调用 `write_decision_output.py`
 
 `dimensions` 中每个维度至少包含：
 

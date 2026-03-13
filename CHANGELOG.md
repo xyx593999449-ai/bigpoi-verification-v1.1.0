@@ -1,6 +1,35 @@
 # 更新履历 (CHANGELOG)
 
 本文件用于记录 `bigpoi-verification` skill 包的所有重大变更、修复与改进。
+## [1.6.6] - 2026-03-13
+
+### 变更 (Changed) - 全链路运行隔离与中间文件防误读
+- **新增统一 run 上下文模块**：新增 `run_context.py`，统一生成 `run_id`、`output/runs/{run_id}/process|staging` 目录，并为中间 JSON 绑定 `run_id / poi_id / created_at`。
+- **父技能新增运行初始化入口**：新增 `skills-bigpoi-verification/scripts/init_run_context.py`，用于在父技能启动时初始化本次运行目录，避免多个 POI 共用固定中间文件名。
+- **证据收集链路传递 run 上下文**：`call_internal_proxy.py`、`call_map_vendor.py`、`write_map_relevance_review.py`、`merge_evidence_collection_outputs.py`、`write_evidence_output.py` 现在会在 raw/review/merge/evidence 各阶段传递并校验 `run_id`。
+- **verification 增加身份校验**：`write_decision_output.py` 现在强制校验 `decision seed.context`、`evidence.metadata.run_id` 与当前输入 POI 一致，避免 seed 写失败后误读旧文件。
+- **父技能成包与终检增加 run 一致性校验**：`write_result_bundle.py` 与 `validate_result_bundle.py` 现在要求 `decision.run_id`、`evidence.metadata.run_id`、`record.run_id`、`index.run_id` 保持一致。
+- **文档同步更新**：`README.md`、`evidence-collection/SKILL.md`、`verification/SKILL.md`、`skills-bigpoi-verification/SKILL.md` 已补充 `run_id`、`output/runs/{run_id}` 与中间文件写入约束。
+
+### 影响范围
+
+- `run_context.py`
+- `evidence-collection/scripts/call_internal_proxy.py`
+- `evidence-collection/scripts/call_map_vendor.py`
+- `evidence-collection/scripts/write_map_relevance_review.py`
+- `evidence-collection/scripts/merge_evidence_collection_outputs.py`
+- `evidence-collection/scripts/write_evidence_output.py`
+- `verification/scripts/write_decision_output.py`
+- `skills-bigpoi-verification/scripts/init_run_context.py`
+- `skills-bigpoi-verification/scripts/write_result_bundle.py`
+- `skills-bigpoi-verification/scripts/validate_result_bundle.py`
+- `README.md`
+- `evidence-collection/SKILL.md`
+- `verification/SKILL.md`
+- `skills-bigpoi-verification/SKILL.md`
+
+---
+
 ## [1.6.5] - 2026-03-10
 
 ### 变更 (Changed) - 父技能结果目录自动探测与跨系统路径约束

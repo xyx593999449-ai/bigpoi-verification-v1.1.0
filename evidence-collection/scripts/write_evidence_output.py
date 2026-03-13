@@ -9,9 +9,13 @@ from datetime import datetime
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parents[1]
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
+from run_context import collect_item_run_ids, require_context, set_item_run_context
 from evidence_collection_common import ensure_stdout_utf8, normalize_input_poi, read_json_file, utc_iso_now, utc_timestamp, write_json_file
 
 
@@ -139,6 +143,8 @@ def main() -> int:
     parser.add_argument("-PoiPath", required=True)
     parser.add_argument("-CollectorOutputPath", required=True)
     parser.add_argument("-OutputDirectory", required=True)
+    parser.add_argument("-RunId")
+    parser.add_argument("-TaskId")
     args = parser.parse_args()
 
     poi = normalize_input_poi(read_json_file(args.PoiPath))
@@ -151,6 +157,9 @@ def main() -> int:
         raise ValueError("input.poi_type must be a 6-digit code")
 
     collector_output = read_json_file(args.CollectorOutputPath)
+    collector_context = require_context(collector_output, label="collector_output", expected_poi_id=str(poi["id"]), expected_run_id=args.RunId, allow_missing=not bool(args.RunId))
+    resolved_run_id = str(args.RunId or (collector_context or {}).get("run_id") or "").strip()
+    resolved_task_id = str(args.TaskId or poi.get("task_id") or (collector_context or {}).get("task_id") or "").strip()
     items = get_evidence_items(collector_output)
     errors: list[str] = []
     timestamp = utc_timestamp()
@@ -161,6 +170,10 @@ def main() -> int:
             continue
         normalized_items.append(normalize_evidence_item(item, poi, timestamp, index, errors))
 
+    normalized_items = [set_item_run_context(item, resolved_run_id or None, resolved_task_id or None) for item in normalized_items]
+    item_run_ids = collect_item_run_ids(normalized_items)
+    if resolved_run_id and item_run_ids and item_run_ids != {resolved_run_id}:
+        errors.append("evidence item run_id must match the current run")
     normalized_items = [item for item in (prune_empty(item) for item in normalized_items) if item is not None]
     if not normalized_items:
         errors.append("no evidence items were produced")
@@ -175,6 +188,7 @@ def main() -> int:
     result = {
         "status": "ok",
         "poi_id": str(poi["id"]),
+        "run_id": resolved_run_id,
         "evidence_count": len(normalized_items),
         "evidence_path": str(output_path.resolve()),
     }

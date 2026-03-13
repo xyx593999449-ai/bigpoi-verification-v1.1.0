@@ -9,9 +9,13 @@ import urllib.request
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parents[1]
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
+from run_context import attach_context
 from evidence_collection_common import (
     convert_map_vendor_api_response,
     ensure_stdout_utf8,
@@ -45,6 +49,9 @@ def main() -> int:
     parser.add_argument("-PoiName", required=True)
     parser.add_argument("-City", required=True)
     parser.add_argument("-OutputPath", required=True)
+    parser.add_argument("-PoiId")
+    parser.add_argument("-TaskId")
+    parser.add_argument("-RunId")
     parser.add_argument("-CommonConfigPath")
     parser.add_argument("-TimeoutSeconds", type=int)
     args = parser.parse_args()
@@ -98,12 +105,15 @@ def main() -> int:
         "vendors": vendor_results,
         "missing_vendors": missing_vendors,
     }
+    if args.RunId and args.PoiId:
+        payload = attach_context(payload, args.RunId, args.PoiId, task_id=args.TaskId)
     write_json_file(payload, args.OutputPath)
 
     result = {
         "status": status,
         "result_path": str(Path(args.OutputPath).resolve()),
         "missing_vendors": missing_vendors,
+        "run_id": str(args.RunId or ""),
         "vendor_counts": {
             "amap": int(vendor_results["amap"]["result_count"]),
             "bmap": int(vendor_results["bmap"]["result_count"]),

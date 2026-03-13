@@ -141,6 +141,7 @@ def build_record(input_data: dict[str, Any], evidence: list[dict[str, Any]], dec
     corrections = decision.get("corrections") if isinstance(decision.get("corrections"), dict) else {}
     dimensions = decision["dimensions"]
     created_at = utc_iso_now()
+    run_id = str(decision.get("run_id") or "").strip()
 
     coordinate_candidates = []
     if isinstance(corrections.get("coordinates"), dict):
@@ -232,6 +233,7 @@ def build_record(input_data: dict[str, Any], evidence: list[dict[str, Any]], dec
     record = {
         "record_id": f"REC_{timestamp}_{new_short_hash(f'{poi_id}|{timestamp}|record')}",
         "poi_id": poi_id,
+        "run_id": run_id,
         "input_data": {
             "name": str(input_data["name"]),
             "poi_type": str(input_data["poi_type"]),
@@ -291,6 +293,7 @@ def build_record(input_data: dict[str, Any], evidence: list[dict[str, Any]], dec
             "custom_fields": {
                 "task_id": str(input_data.get("task_id") or ""),
                 "contract_version": "1.6.0",
+                "run_id": run_id,
             },
         },
         "created_at": created_at,

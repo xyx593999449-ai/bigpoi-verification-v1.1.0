@@ -7,8 +7,11 @@ import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parents[1]
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from bundle_common import (
     ALLOWED_DECISION_STATUS,
@@ -19,6 +22,7 @@ from bundle_common import (
     read_json_file,
     test_bundle_name,
 )
+from run_context import collect_item_run_ids
 from runtime_paths import build_task_dir, detect_workspace_root
 
 
@@ -30,7 +34,7 @@ def add_warning(warnings: list[str], message: str) -> None:
     warnings.append(message)
 
 
-def validate_decision(decision: dict, poi_id: str, errors: list[str]) -> None:
+def validate_decision(decision: dict, poi_id: str, expected_run_id: str, errors: list[str]) -> None:
     for field in ("decision_id", "poi_id", "overall", "dimensions", "created_at"):
         if field not in decision:
             add_error(errors, f"decision.{field} is required")
@@ -38,6 +42,11 @@ def validate_decision(decision: dict, poi_id: str, errors: list[str]) -> None:
         add_error(errors, "decision.poi_id must match record.poi_id")
     if "created_at" in decision and not is_iso_time(str(decision["created_at"])):
         add_error(errors, "decision.created_at must be ISO datetime")
+    run_id = str(decision.get("run_id") or "").strip()
+    if not run_id:
+        add_error(errors, "decision.run_id is required")
+    elif expected_run_id and run_id != expected_run_id:
+        add_error(errors, "decision.run_id must match bundle run_id")
     overall = decision.get("overall")
     if overall is not None:
         if not isinstance(overall, dict):
@@ -58,12 +67,18 @@ def validate_decision(decision: dict, poi_id: str, errors: list[str]) -> None:
                     add_error(errors, f"decision.dimensions.{field} is required")
 
 
-def validate_evidence(evidence, poi_id: str, errors: list[str]) -> None:
+def validate_evidence(evidence, poi_id: str, expected_run_id: str, errors: list[str]) -> None:
     if not isinstance(evidence, list):
         add_error(errors, "evidence must be an array")
         return
     if not evidence:
         add_error(errors, "evidence array cannot be empty")
+        return
+    run_ids = collect_item_run_ids(evidence)
+    if not run_ids:
+        add_error(errors, "evidence.metadata.run_id is required for all items")
+    elif expected_run_id and run_ids != {expected_run_id}:
+        add_error(errors, "evidence item run_id must match bundle run_id")
     for index, item in enumerate(evidence):
         if not isinstance(item, dict):
             add_error(errors, f"evidence[{index}] must be an object")
@@ -75,6 +90,11 @@ def validate_evidence(evidence, poi_id: str, errors: list[str]) -> None:
             add_error(errors, f"evidence[{index}].poi_id must match record.poi_id")
         if "collected_at" in item and not is_iso_time(str(item["collected_at"])):
             add_error(errors, f"evidence[{index}].collected_at must be ISO datetime")
+        metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else None
+        if metadata is None:
+            add_error(errors, f"evidence[{index}].metadata is required")
+        elif expected_run_id and str(metadata.get("run_id") or "").strip() != expected_run_id:
+            add_error(errors, f"evidence[{index}].metadata.run_id must match bundle run_id")
         source = item.get("source")
         if source is not None:
             if not isinstance(source, dict):
@@ -91,13 +111,16 @@ def validate_evidence(evidence, poi_id: str, errors: list[str]) -> None:
                 add_error(errors, f"evidence[{index}].data.name is required")
 
 
-def validate_record(record: dict, errors: list[str]) -> None:
+def validate_record(record: dict, expected_run_id: str, errors: list[str]) -> None:
     for field in ("record_id", "poi_id", "input_data", "verification_result", "audit_trail", "created_at"):
         if field not in record:
             add_error(errors, f"record.{field} is required")
     for field in ("created_at", "updated_at", "expires_at"):
         if record.get(field) and not is_iso_time(str(record[field])):
             add_error(errors, f"record.{field} must be ISO datetime")
+    run_id = str(record.get("run_id") or "").strip()
+    if expected_run_id and run_id != expected_run_id:
+        add_error(errors, "record.run_id must match bundle run_id")
     verification_result = record.get("verification_result")
     if verification_result is not None:
         if not isinstance(verification_result, dict):
@@ -126,7 +149,7 @@ def validate_record(record: dict, errors: list[str]) -> None:
                     add_error(errors, f"record.audit_trail.{field} is required")
 
 
-def validate_index(index: dict, task_dir: Path, workspace_root: Path, poi_id: str, task_id: str, errors: list[str]) -> None:
+def validate_index(index: dict, task_dir: Path, workspace_root: Path, poi_id: str, task_id: str, expected_run_id: str, errors: list[str]) -> None:
     for field in ("poi_id", "task_id", "created_at", "task_dir", "files", "description"):
         if field not in index:
             add_error(errors, f"index.{field} is required")
@@ -134,6 +157,10 @@ def validate_index(index: dict, task_dir: Path, workspace_root: Path, poi_id: st
         add_error(errors, "index.poi_id must match record.poi_id")
     if "task_id" in index and str(index["task_id"]) != task_id:
         add_error(errors, "index.task_id must match task directory name")
+    if expected_run_id:
+        run_id = str(index.get("run_id") or "").strip()
+        if run_id != expected_run_id:
+            add_error(errors, "index.run_id must match bundle run_id")
     if "created_at" in index and not is_iso_time(str(index["created_at"])):
         add_error(errors, "index.created_at must be ISO datetime")
     expected_task_dir = build_task_dir(workspace_root, task_id).resolve()
@@ -268,12 +295,15 @@ def main() -> int:
         return 0
 
     poi_id = str(record.get("poi_id") or "")
-    validate_record(record, errors)
+    bundle_run_id = str(index.get("run_id") or record.get("run_id") or "").strip()
+    if not bundle_run_id:
+        errors.append("bundle run_id is required in index or record")
+    validate_record(record, bundle_run_id, errors)
 
     if decision_path and decision_path.is_file():
         decision = read_json_file(decision_path)
         if isinstance(decision, dict):
-            validate_decision(decision, poi_id, errors)
+            validate_decision(decision, poi_id, bundle_run_id, errors)
         else:
             errors.append("decision file must contain an object")
     else:
@@ -281,11 +311,11 @@ def main() -> int:
 
     if evidence_path and evidence_path.is_file():
         evidence = read_json_file(evidence_path)
-        validate_evidence(evidence, poi_id, errors)
+        validate_evidence(evidence, poi_id, bundle_run_id, errors)
     else:
         errors.append("evidence file is missing")
 
-    validate_index(index, resolved_task_dir, workspace_root, poi_id, task_id, errors)
+    validate_index(index, resolved_task_dir, workspace_root, poi_id, task_id, bundle_run_id, errors)
 
     failed_stage = "complete"
     if any(message.startswith("evidence") for message in errors):
@@ -310,6 +340,7 @@ def main() -> int:
         "retry_action": retry_action,
         "task_dir": str(resolved_task_dir),
         "task_id": task_id,
+        "run_id": bundle_run_id,
         "workspace_root": str(workspace_root),
         "workspace_detection": {
             "strategy": workspace_detection.strategy,
