@@ -152,3 +152,10 @@ write-pg-verified/
 - 如果你已经明确知道要写回哪一份结果，可以直接传 `index_file`，此时不会参与“最新 index”选择。
 - 技能保持幂等：`verified` 表已存在相同 `task_id` 时，不重复插入，但仍会更新 `init` 表状态。
 - 日志会记录候选 index 数量、最终命中的最新文件，以及本次实际写入的表名，便于排查问题。`Path.rglob(...)` 递归查找可覆盖 Linux 下 `.claude` 等隐藏目录。
+
+## 回库字段来源约束
+
+- `verification_notes` 仅来自 `decision.overall.summary`，要求上游提供稳定的中文摘要。
+- `changes_made` 优先使用 `record.verification_result.changes`，不再直接依赖自由格式的 `decision.corrections`。
+- 成果表中的 `name`、`x_coord`、`y_coord`、`poi_type`、`address`、`city`、`city_adcode` 均以 `record.verification_result.final_values` 为准。
+- 如果 `record.verification_result.final_values` 未正确体现核实后的最终值，应视为上游结果不合格，禁止回库。

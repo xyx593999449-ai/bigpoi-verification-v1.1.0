@@ -122,5 +122,10 @@ python verification/scripts/write_decision_output.py -PoiPath <input.json> -Evid
 - `verification/config/downgrade.yaml`
 - `verification/config/type_mapping.yaml`
 
+## 回库稳定性约束
 
-
+- `decision.overall.summary` 必须输出为简体中文短句，供成果表 `verification_notes` 直接复用。
+- 如果核实结论包含建议修改、修正、改为等信息，`decision seed` 中必须同步提供结构化 `corrections`。
+- `corrections` 仅允许包含 `name`、`address`、`coordinates`、`category`、`city`、`city_adcode`。
+- 每个修正项必须包含 `suggested` 与 `reason`，`original` 缺失时也必须由脚本补齐原始值。
+- 如果 seed 文本中出现修改信号但没有 `corrections`，`write_decision_output.py` 必须直接失败，不允许生成正式 `decision_*.json`。

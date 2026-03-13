@@ -187,7 +187,7 @@ class VerifiedResultWriter:
                 "poi_type": final_values.get("category"),
                 "address": final_values.get("address"),
                 "city": final_values.get("city"),
-                "city_adcode": "",
+                "city_adcode": final_values.get("city_adcode", ""),
             }
             if not poi_data["city_adcode"] and "input_data" in record:
                 poi_data["city_adcode"] = record["input_data"].get("city_adcode", "")
@@ -222,7 +222,7 @@ class VerifiedResultWriter:
             }
 
         task_id = index_data.get("task_id", "")
-        db_data = converter.decision_to_db_format(decision, evidence, poi_data, task_id=task_id)
+        db_data = converter.decision_to_db_format(decision, evidence, poi_data, task_id=task_id, record=record)
         return self._execute_db_write(db_data, table_names)
 
     def _execute_db_write(self, db_data: Dict[str, Any], table_names: Dict[str, str]) -> Dict[str, Any]:

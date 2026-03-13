@@ -116,5 +116,9 @@ python skills-bigpoi-verification/scripts/init_run_context.py -InputPath <input.
 - `skills-bigpoi-verification/schema/decision.schema.json`
 - `skills-bigpoi-verification/schema/record.schema.json`
 
+## 回库一致性校验
 
-
+- 父技能在最终成包前必须校验 `decision.corrections -> record.verification_result.final_values -> record.verification_result.changes` 三者一致。
+- 若 `decision.corrections` 中存在某字段修正，`record.verification_result.final_values` 必须使用对应的 `suggested` 值。
+- `record.verification_result.changes` 必须逐项记录字段、旧值、新值和变更原因。
+- 如果三者任一不一致，最终规格校验必须失败，并以 `failed_stage = verification` 打回核实阶段重新执行。

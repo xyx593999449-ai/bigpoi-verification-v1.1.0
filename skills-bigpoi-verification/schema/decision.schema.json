@@ -4,14 +4,23 @@
   "title": "POI核实决策结果模式",
   "description": "定义大POI核实技能的决策结果标准化格式",
   "type": "object",
-  "required": ["decision_id", "poi_id", "overall", "dimensions", "created_at"],
+  "required": [
+    "decision_id",
+    "poi_id",
+    "run_id",
+    "overall",
+    "dimensions",
+    "created_at"
+  ],
   "properties": {
     "decision_id": {
       "type": "string",
       "description": "决策唯一标识符",
       "minLength": 1,
       "maxLength": 64,
-      "examples": ["DEC_202401150001"]
+      "examples": [
+        "DEC_202401150001"
+      ]
     },
     "poi_id": {
       "type": "string",
@@ -22,39 +31,66 @@
     "overall": {
       "type": "object",
       "description": "整体决策结果",
-      "required": ["status", "confidence"],
+      "required": [
+        "status",
+        "confidence"
+      ],
       "properties": {
         "status": {
           "type": "string",
           "description": "核实状态",
-          "enum": ["accepted", "downgraded", "manual_review", "rejected"],
-          "examples": ["accepted"]
+          "enum": [
+            "accepted",
+            "downgraded",
+            "manual_review",
+            "rejected"
+          ],
+          "examples": [
+            "accepted"
+          ]
         },
         "confidence": {
           "type": "number",
           "description": "整体置信度",
           "minimum": 0,
           "maximum": 1,
-          "examples": [0.92]
+          "examples": [
+            0.92
+          ]
         },
         "action": {
           "type": "string",
           "description": "建议处理动作",
-          "enum": ["adopt", "modify", "reject", "manual_review", "further_investigation"],
-          "examples": ["adopt"]
+          "enum": [
+            "adopt",
+            "modify",
+            "reject",
+            "manual_review",
+            "further_investigation"
+          ],
+          "examples": [
+            "adopt"
+          ]
         },
         "summary": {
           "type": "string",
           "description": "决策摘要",
           "maxLength": 500,
-          "examples": ["高置信度通过，所有维度均符合要求"]
+          "examples": [
+            "高置信度通过，所有维度均符合要求"
+          ]
         }
       }
     },
     "dimensions": {
       "type": "object",
       "description": "各维度核实结果",
-      "required": ["existence", "name", "location", "category"],
+      "required": [
+        "existence",
+        "name",
+        "location",
+        "category"
+      ],
       "properties": {
         "existence": {
           "$ref": "#/definitions/dimension_result"
@@ -169,12 +205,21 @@
             "suggested": {
               "type": "string"
             },
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            },
             "confidence": {
               "type": "number",
               "minimum": 0,
               "maximum": 1
             }
-          }
+          },
+          "required": [
+            "suggested",
+            "reason"
+          ],
+          "description": "??????"
         },
         "address": {
           "type": "object",
@@ -185,15 +230,25 @@
             "suggested": {
               "type": "string"
             },
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            },
             "confidence": {
               "type": "number",
               "minimum": 0,
               "maximum": 1
             }
-          }
+          },
+          "required": [
+            "suggested",
+            "reason"
+          ],
+          "description": "??????"
         },
         "coordinates": {
           "type": "object",
+          "description": "??????",
           "properties": {
             "original": {
               "type": "object",
@@ -203,6 +258,9 @@
                 },
                 "latitude": {
                   "type": "number"
+                },
+                "coordinate_system": {
+                  "type": "string"
                 }
               }
             },
@@ -214,15 +272,30 @@
                 },
                 "latitude": {
                   "type": "number"
+                },
+                "coordinate_system": {
+                  "type": "string"
                 }
-              }
+              },
+              "required": [
+                "longitude",
+                "latitude"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1
             },
             "confidence": {
               "type": "number",
               "minimum": 0,
               "maximum": 1
             }
-          }
+          },
+          "required": [
+            "suggested",
+            "reason"
+          ]
         },
         "category": {
           "type": "object",
@@ -231,14 +304,75 @@
               "type": "string"
             },
             "suggested": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^\\d{6}$"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1
             },
             "confidence": {
               "type": "number",
               "minimum": 0,
               "maximum": 1
             }
-          }
+          },
+          "required": [
+            "suggested",
+            "reason"
+          ],
+          "description": "????????"
+        },
+        "city": {
+          "type": "object",
+          "properties": {
+            "original": {
+              "type": "string"
+            },
+            "suggested": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            },
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "required": [
+            "suggested",
+            "reason"
+          ],
+          "description": "??????"
+        },
+        "city_adcode": {
+          "type": "object",
+          "properties": {
+            "original": {
+              "type": "string"
+            },
+            "suggested": {
+              "type": "string",
+              "pattern": "^\\d{6}$"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            },
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "required": [
+            "suggested",
+            "reason"
+          ],
+          "description": "????????????"
         }
       }
     },
@@ -261,27 +395,46 @@
       "type": "string",
       "description": "决策版本",
       "pattern": "^\\d+\\.\\d+\\.\\d+$",
-      "examples": ["1.0.0"]
+      "examples": [
+        "1.0.0"
+      ]
+    },
+    "run_id": {
+      "type": "string",
+      "description": "??????????",
+      "minLength": 1,
+      "maxLength": 128
     }
   },
   "definitions": {
     "dimension_result": {
       "type": "object",
       "description": "单个维度的核实结果",
-      "required": ["result", "confidence"],
+      "required": [
+        "result",
+        "confidence"
+      ],
       "properties": {
         "result": {
           "type": "string",
           "description": "维度判断结果",
-          "enum": ["pass", "fail", "uncertain"],
-          "examples": ["pass"]
+          "enum": [
+            "pass",
+            "fail",
+            "uncertain"
+          ],
+          "examples": [
+            "pass"
+          ]
         },
         "confidence": {
           "type": "number",
           "description": "维度置信度",
           "minimum": 0,
           "maximum": 1,
-          "examples": [0.95]
+          "examples": [
+            0.95
+          ]
         },
         "score": {
           "type": "number",
@@ -341,13 +494,18 @@
           "result": "pass",
           "confidence": 0.95,
           "score": 0.95,
-          "evidence_refs": ["EVD_001", "EVD_002"]
+          "evidence_refs": [
+            "EVD_001",
+            "EVD_002"
+          ]
         },
         "name": {
           "result": "pass",
           "confidence": 1.0,
           "score": 1.0,
-          "evidence_refs": ["EVD_001"],
+          "evidence_refs": [
+            "EVD_001"
+          ],
           "details": {
             "matched_value": "北京大学第一医院",
             "similarity": 1.0
@@ -355,9 +513,12 @@
         },
         "location": {
           "result": "pass",
-          "confidence": 0.90,
-          "score": 0.90,
-          "evidence_refs": ["EVD_001", "EVD_003"],
+          "confidence": 0.9,
+          "score": 0.9,
+          "evidence_refs": [
+            "EVD_001",
+            "EVD_003"
+          ],
           "details": {
             "distance": 12.5
           }
@@ -366,7 +527,9 @@
           "result": "pass",
           "confidence": 0.95,
           "score": 0.95,
-          "evidence_refs": ["EVD_001"]
+          "evidence_refs": [
+            "EVD_001"
+          ]
         }
       },
       "evidence_summary": {

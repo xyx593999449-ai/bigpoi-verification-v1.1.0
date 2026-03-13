@@ -286,3 +286,11 @@ python skills-bigpoi-verification/scripts/validate_result_bundle.py -TaskDir <ou
 1. 把三个技能目录中的 `skill.md` 统一重命名为 `SKILL.md`
 2. 将技能目录整理到项目级 `.claude/skills/` 或用户级 `~/.claude/skills/` 下
 
+## 回库稳定性约束
+
+为了保证 `write-pg-verified` 能稳定写入正确成果，正式链路需要满足以下约束：
+
+- `decision.overall.summary` 必须输出为稳定中文摘要，直接用于成果表 `verification_notes`。
+- 只要核实结果包含建议修改，就必须在 `decision.corrections` 中提供对应的结构化修正，不能只写“建议修改 xxx”这类自然语言。
+- 父技能生成 `record` 时，`record.verification_result.final_values` 必须严格反映 `decision.corrections` 中的最终建议值。
+- `write-pg-verified` 使用 `record.verification_result.changes` 生成 `changes_made`，并使用 `record.verification_result.final_values` 写入成果字段。

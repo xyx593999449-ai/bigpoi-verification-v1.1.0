@@ -17,6 +17,12 @@ if str(REPO_ROOT) not in sys.path:
 from run_context import collect_item_run_ids, require_context
 
 
+ALLOWED_CORRECTION_FIELDS = ("name", "address", "coordinates", "category", "city", "city_adcode")
+CHANGE_SIGNAL_PATTERN = re.compile(
+    r"(\u5efa\u8bae(?:\u4fee\u6539|\u66f4\u6b63|\u8c03\u6574|\u66f4\u65b0|\u8865\u5145)|\u5e94\u6539\u4e3a|\u4fee\u6b63\u4e3a|\u4fee\u6539\u4e3a|\u9700\u6539\u4e3a|\u5efa\u8bae\u4f7f\u7528)"
+)
+
+
 def ensure_stdout_utf8() -> None:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
@@ -60,7 +66,7 @@ def read_json_file(path: str | Path):
 def write_json_file(data, path: str | Path) -> None:
     file_path = Path(path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
-    file_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    file_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
 
 
 def is_iso_time(value: str) -> bool:
@@ -208,18 +214,162 @@ def get_action(status: str) -> str:
     return mapping.get(status, "manual_review")
 
 
-def get_summary(status: str, confidence: float, dimensions: dict) -> str:
+def normalize_scalar_value(value):
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped or None
+    return value
+
+
+def normalize_coordinate_value(value, field: str, errors: list[str]):
+    if not isinstance(value, dict):
+        add_error(errors, f"seed.corrections.{field} must be an object")
+        return None
+    normalized = {}
+    for key in ("longitude", "latitude"):
+        if value.get(key) is None:
+            add_error(errors, f"seed.corrections.{field}.{key} is required")
+            continue
+        normalized[key] = float(value[key])
+    coordinate_system = str(value.get("coordinate_system") or "").strip()
+    if coordinate_system:
+        normalized["coordinate_system"] = coordinate_system
+    return normalized if "longitude" in normalized and "latitude" in normalized else None
+
+
+def get_default_original_value(field: str, poi: dict):
+    if field == "coordinates":
+        coordinates = poi.get("coordinates")
+        if not isinstance(coordinates, dict):
+            return None
+        normalized = {}
+        if coordinates.get("longitude") is not None:
+            normalized["longitude"] = float(coordinates["longitude"])
+        if coordinates.get("latitude") is not None:
+            normalized["latitude"] = float(coordinates["latitude"])
+        if coordinates.get("coordinate_system"):
+            normalized["coordinate_system"] = str(coordinates["coordinate_system"])
+        return normalized or None
+    mapping = {
+        "name": poi.get("name"),
+        "address": poi.get("address"),
+        "category": poi.get("poi_type"),
+        "city": poi.get("city"),
+        "city_adcode": poi.get("city_adcode"),
+    }
+    return normalize_scalar_value(mapping.get(field))
+
+
+def values_equal(left, right) -> bool:
+    if isinstance(left, dict) or isinstance(right, dict):
+        return json.dumps(left or {}, ensure_ascii=False, sort_keys=True) == json.dumps(right or {}, ensure_ascii=False, sort_keys=True)
+    return normalize_scalar_value(left) == normalize_scalar_value(right)
+
+
+def collect_change_signal_texts(seed: dict) -> list[str]:
+    texts: list[str] = []
+    overall = seed.get("overall")
+    if isinstance(overall, dict):
+        summary = overall.get("summary")
+        if isinstance(summary, str) and summary.strip():
+            texts.append(summary)
+    downgrade_info = seed.get("downgrade_info")
+    if isinstance(downgrade_info, dict):
+        for key in ("reason_description", "recommendation"):
+            value = downgrade_info.get(key)
+            if isinstance(value, str) and value.strip():
+                texts.append(value)
+    dimensions = seed.get("dimensions")
+    if isinstance(dimensions, dict):
+        for dimension in dimensions.values():
+            if not isinstance(dimension, dict):
+                continue
+            details = dimension.get("details")
+            if not isinstance(details, dict):
+                continue
+            for key in ("notes", "matched_value", "expected_value", "observed_value", "reason", "suggestion"):
+                value = details.get(key)
+                if isinstance(value, str) and value.strip():
+                    texts.append(value)
+    return texts
+
+
+def normalize_corrections(seed: dict, poi: dict, errors: list[str]) -> dict:
+    corrections = seed.get("corrections")
+    if corrections is None:
+        return {}
+    if not isinstance(corrections, dict):
+        add_error(errors, "seed.corrections must be an object")
+        return {}
+
+    normalized = {}
+    for field, correction in corrections.items():
+        if field not in ALLOWED_CORRECTION_FIELDS:
+            add_error(errors, f"seed.corrections.{field} is not supported")
+            continue
+        if not isinstance(correction, dict):
+            add_error(errors, f"seed.corrections.{field} must be an object")
+            continue
+
+        original = correction.get("original", get_default_original_value(field, poi))
+        suggested = correction.get("suggested")
+        reason = str(correction.get("reason") or "").strip()
+
+        if field == "coordinates":
+            original = normalize_coordinate_value(original, f"{field}.original", errors) if original is not None else get_default_original_value(field, poi)
+            suggested = normalize_coordinate_value(suggested, f"{field}.suggested", errors)
+        else:
+            original = normalize_scalar_value(original)
+            suggested = normalize_scalar_value(suggested)
+
+        if suggested is None:
+            add_error(errors, f"seed.corrections.{field}.suggested is required")
+            continue
+        if field in {"category", "city_adcode"} and not re.fullmatch(r"\d{6}", str(suggested)):
+            add_error(errors, f"seed.corrections.{field}.suggested must be a 6-digit code")
+        if not reason:
+            add_error(errors, f"seed.corrections.{field}.reason is required")
+        if values_equal(original, suggested):
+            add_error(errors, f"seed.corrections.{field} must change the value")
+            continue
+
+        normalized_entry = {
+            "original": original,
+            "suggested": suggested,
+            "reason": reason,
+        }
+        confidence = correction.get("confidence")
+        if confidence is not None:
+            confidence = float(confidence)
+            if confidence < 0 or confidence > 1:
+                add_error(errors, f"seed.corrections.{field}.confidence must be between 0 and 1")
+            else:
+                normalized_entry["confidence"] = confidence
+        normalized[field] = normalized_entry
+
+    return normalized
+
+
+def get_summary(status: str, confidence: float, dimensions: dict, corrections: dict) -> str:
     failed = [name for name, dimension in dimensions.items() if dimension["result"] == "fail"]
     uncertain = [name for name, dimension in dimensions.items() if dimension["result"] == "uncertain"]
+    confidence_text = f"{confidence:.2f}"
+    correction_count = len(corrections)
     if status == "accepted":
-        return f"all required dimensions passed; overall confidence {confidence}"
+        if correction_count:
+            return f"\u6838\u5b9e\u901a\u8fc7\uff0c\u5efa\u8bae\u6309\u7ed3\u6784\u5316\u4fee\u6b63\u66f4\u65b0{correction_count}\u9879\u5b57\u6bb5\uff0c\u7efc\u5408\u7f6e\u4fe1\u5ea6{confidence_text}\u3002"
+        return f"\u6838\u5b9e\u901a\u8fc7\uff0c\u6838\u5fc3\u7ef4\u5ea6\u5747\u6ee1\u8db3\u8981\u6c42\uff0c\u7efc\u5408\u7f6e\u4fe1\u5ea6{confidence_text}\u3002"
     if status == "downgraded":
-        return f"some dimensions remain uncertain: {', '.join(uncertain)}; overall confidence {confidence}"
+        uncertain_text = "\u3001".join(uncertain) if uncertain else "\u90e8\u5206\u7ef4\u5ea6"
+        if correction_count:
+            return f"\u6838\u5b9e\u964d\u7ea7\uff0c{uncertain_text}\u4ecd\u5b58\u5728\u4e0d\u786e\u5b9a\u6027\uff0c\u4e14\u5efa\u8bae\u4fee\u6b63{correction_count}\u9879\u5b57\u6bb5\uff0c\u7efc\u5408\u7f6e\u4fe1\u5ea6{confidence_text}\u3002"
+        return f"\u6838\u5b9e\u964d\u7ea7\uff0c{uncertain_text}\u4ecd\u5b58\u5728\u4e0d\u786e\u5b9a\u6027\uff0c\u7efc\u5408\u7f6e\u4fe1\u5ea6{confidence_text}\u3002"
     if status == "manual_review":
-        return f"manual review required because failed dimensions: {', '.join(failed)}; overall confidence {confidence}"
+        failed_text = "\u3001".join(failed) if failed else "\u5173\u952e\u7ef4\u5ea6"
+        return f"\u9700\u8981\u4eba\u5de5\u590d\u6838\uff0c\u539f\u56e0\u662f{failed_text}\u672a\u901a\u8fc7\u6216\u5b58\u5728\u51b2\u7a81\uff0c\u7efc\u5408\u7f6e\u4fe1\u5ea6{confidence_text}\u3002"
     if status == "rejected":
-        return f"verification rejected because existence failed; overall confidence {confidence}"
-    return f"manual review required; overall confidence {confidence}"
+        return f"\u6838\u5b9e\u62d2\u7edd\uff0c\u5b58\u5728\u6027\u7ef4\u5ea6\u672a\u901a\u8fc7\uff0c\u7efc\u5408\u7f6e\u4fe1\u5ea6{confidence_text}\u3002"
+    return f"\u9700\u8981\u4eba\u5de5\u590d\u6838\uff0c\u7efc\u5408\u7f6e\u4fe1\u5ea6{confidence_text}\u3002"
 
 
 def main() -> int:
@@ -256,6 +406,11 @@ def main() -> int:
     if processed_at and not is_iso_time(processed_at):
         add_error(errors, "seed.processed_at must be ISO datetime")
 
+    normalized_corrections = normalize_corrections(seed, poi, errors)
+    change_signal_texts = collect_change_signal_texts(seed)
+    if any(CHANGE_SIGNAL_PATTERN.search(text) for text in change_signal_texts) and not normalized_corrections:
+        add_error(errors, "seed.corrections is required when the seed contains modification suggestions")
+
     dimensions = seed.get("dimensions")
     if not isinstance(dimensions, dict):
         add_error(errors, "seed.dimensions is required and must be an object")
@@ -280,7 +435,7 @@ def main() -> int:
     overall_confidence = float(overall_seed.get("confidence", measure_overall_confidence(dimensions)))
     status = str(overall_seed.get("status", infer_status(dimensions, overall_confidence)))
     action = str(overall_seed.get("action", get_action(status)))
-    summary = str(overall_seed.get("summary", get_summary(status, overall_confidence, dimensions)))
+    summary = get_summary(status, overall_confidence, dimensions, normalized_corrections)
 
     hash_source = f"{poi_id}|{resolved_run_id}|{stamp}|decision".encode("utf-8")
     short_hash = hashlib.sha256(hash_source).hexdigest()[:8].upper()
@@ -319,18 +474,13 @@ def main() -> int:
         "created_at": created_at,
         "processed_at": processed_at or created_at,
         "processing_duration_ms": int(seed.get("processing_duration_ms", 0)),
-        "version": str(seed.get("version") or "1.6.0"),
-        "metadata": prune_empty(
-            {
-                "task_id": resolved_task_id,
-                "seed_created_at": (seed_context or {}).get("created_at"),
-            }
-        ),
+        "version": str(seed.get("version") or "1.6.7"),
+        "metadata": prune_empty({"task_id": resolved_task_id, "seed_created_at": (seed_context or {}).get("created_at")}),
     }
     if "downgrade_info" in seed:
         decision["downgrade_info"] = seed["downgrade_info"]
-    if "corrections" in seed:
-        decision["corrections"] = seed["corrections"]
+    if normalized_corrections:
+        decision["corrections"] = normalized_corrections
 
     decision = prune_empty(decision)
     output_directory = Path(args.OutputDirectory)

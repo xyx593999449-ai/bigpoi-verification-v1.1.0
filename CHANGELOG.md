@@ -1,6 +1,30 @@
 # 更新履历 (CHANGELOG)
 
 本文件用于记录 `bigpoi-verification` skill 包的所有重大变更、修复与改进。
+## [1.6.7] - 2026-03-13
+
+### 修复 (Fixed) - 回库结果稳定性
+- **统一核实摘要语言**：`verification/scripts/write_decision_output.py` 现在统一生成中文 `overall.summary`，供成果表 `verification_notes` 直接复用。
+- **收紧结构化修正要求**：当核实结论出现建议修改、修正、改为等信号时，必须在 `decision.corrections` 中输出 `name`、`address`、`coordinates`、`category`、`city`、`city_adcode` 的结构化修正。
+- **强化父技能一致性校验**：`skills-bigpoi-verification/scripts/bundle_common.py` 与 `validate_result_bundle.py` 现在校验 `corrections -> final_values -> changes` 全链路一致，避免文本建议与最终回库值不一致。
+- **稳定 changes_made 来源**：`write-pg-verified/scripts/data_converter.py` 改为优先读取 `record.verification_result.changes` 生成 `changes_made`，并继续使用 `record.verification_result.final_values` 写入成果字段。
+- **补齐 city_adcode 回写**：`write-pg-verified/scripts/db_writer.py` 现在支持从 `record.verification_result.final_values.city_adcode` 回写成果表。
+
+### 影响文件
+- `verification/scripts/write_decision_output.py`
+- `skills-bigpoi-verification/scripts/bundle_common.py`
+- `skills-bigpoi-verification/scripts/validate_result_bundle.py`
+- `write-pg-verified/scripts/data_converter.py`
+- `write-pg-verified/scripts/db_writer.py`
+- `skills-bigpoi-verification/schema/decision.schema.json`
+- `skills-bigpoi-verification/schema/record.schema.json`
+- `verification/SKILL.md`
+- `skills-bigpoi-verification/SKILL.md`
+- `write-pg-verified/SKILL.md`
+- `README.md`
+
+---
+
 ## [1.6.6] - 2026-03-13
 
 ### 变更 (Changed) - 全链路运行隔离与中间文件防误读

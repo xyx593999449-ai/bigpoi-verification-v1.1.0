@@ -12,6 +12,7 @@ from typing import Any
 
 ALLOWED_DECISION_STATUS = {"accepted", "downgraded", "manual_review", "rejected"}
 ALLOWED_RECORD_STATUS = {"verified", "modified", "rejected", "manual_review_pending"}
+CORRECTION_FIELDS = ("name", "address", "coordinates", "category", "city", "city_adcode")
 
 
 def ensure_stdout_utf8() -> None:
@@ -33,7 +34,7 @@ def read_json_file(path: str | Path) -> Any:
 def write_json_file(data: Any, path: str | Path) -> None:
     file_path = Path(path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
-    file_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    file_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
 
 
 def utc_iso_now() -> str:
@@ -134,6 +135,47 @@ def get_decision_record_status(status: str) -> str:
     return mapping.get(status, "manual_review_pending")
 
 
+def normalize_scalar_value(value: Any) -> Any:
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped or None
+    return value
+
+
+def normalize_coordinate_value(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    normalized: dict[str, Any] = {}
+    if value.get("longitude") is not None:
+        normalized["longitude"] = float(value["longitude"])
+    if value.get("latitude") is not None:
+        normalized["latitude"] = float(value["latitude"])
+    if value.get("coordinate_system"):
+        normalized["coordinate_system"] = str(value["coordinate_system"])
+    return normalized or None
+
+
+def values_equal(left: Any, right: Any) -> bool:
+    if isinstance(left, dict) or isinstance(right, dict):
+        return json.dumps(left or {}, ensure_ascii=False, sort_keys=True) == json.dumps(right or {}, ensure_ascii=False, sort_keys=True)
+    return normalize_scalar_value(left) == normalize_scalar_value(right)
+
+
+def correction_value(corrections: dict[str, Any], field: str):
+    correction = corrections.get(field)
+    if isinstance(correction, dict):
+        return correction.get("suggested")
+    return None
+
+
+def format_change_value(value: Any) -> str:
+    if isinstance(value, dict):
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    if value is None:
+        return ""
+    return str(value)
+
+
 def build_record(input_data: dict[str, Any], evidence: list[dict[str, Any]], decision: dict[str, Any], timestamp: str) -> dict[str, Any]:
     poi_id = str(input_data["id"])
     best = get_best_evidence(evidence) or {}
@@ -143,68 +185,57 @@ def build_record(input_data: dict[str, Any], evidence: list[dict[str, Any]], dec
     created_at = utc_iso_now()
     run_id = str(decision.get("run_id") or "").strip()
 
-    coordinate_candidates = []
-    if isinstance(corrections.get("coordinates"), dict):
-        coordinate_candidates.append(corrections["coordinates"].get("suggested"))
-    if input_data.get("coordinates") is not None:
-        coordinate_candidates.append(input_data["coordinates"])
-    if best_data.get("coordinates") is not None:
-        coordinate_candidates.append(best_data["coordinates"])
-    coordinates_source = get_first_non_empty(coordinate_candidates)
+    input_coordinates = normalize_coordinate_value(input_data.get("coordinates"))
+    best_coordinates = normalize_coordinate_value(best_data.get("coordinates"))
+    corrected_coordinates = normalize_coordinate_value(correction_value(corrections, "coordinates"))
+    final_coordinates = get_first_non_empty([corrected_coordinates, input_coordinates, best_coordinates]) or {}
 
-    name_candidates = []
-    if isinstance(corrections.get("name"), dict):
-        name_candidates.append(corrections["name"].get("suggested"))
-    name_candidates.append(input_data["name"])
-    if best_data.get("name") is not None:
-        name_candidates.append(best_data["name"])
-
-    address_candidates = []
-    if isinstance(corrections.get("address"), dict):
-        address_candidates.append(corrections["address"].get("suggested"))
-    if input_data.get("address") is not None:
-        address_candidates.append(input_data["address"])
-    if best_data.get("address") is not None:
-        address_candidates.append(best_data["address"])
-
-    category_candidates = []
-    if isinstance(corrections.get("category"), dict):
-        category_candidates.append(corrections["category"].get("suggested"))
-    category_candidates.append(input_data["poi_type"])
-
-    final_coordinates: dict[str, Any] = {}
-    if isinstance(coordinates_source, dict):
-        if coordinates_source.get("longitude") is not None:
-            final_coordinates["longitude"] = float(coordinates_source["longitude"])
-        if coordinates_source.get("latitude") is not None:
-            final_coordinates["latitude"] = float(coordinates_source["latitude"])
+    final_name = str(get_first_non_empty([
+        normalize_scalar_value(correction_value(corrections, "name")),
+        normalize_scalar_value(input_data.get("name")),
+        normalize_scalar_value(best_data.get("name")),
+    ]) or "")
+    final_address = str(get_first_non_empty([
+        normalize_scalar_value(correction_value(corrections, "address")),
+        normalize_scalar_value(input_data.get("address")),
+        normalize_scalar_value(best_data.get("address")),
+    ]) or "")
+    final_category = str(get_first_non_empty([
+        normalize_scalar_value(correction_value(corrections, "category")),
+        normalize_scalar_value(input_data.get("poi_type")),
+    ]) or "")
+    final_city = str(get_first_non_empty([
+        normalize_scalar_value(correction_value(corrections, "city")),
+        normalize_scalar_value(input_data.get("city")),
+        normalize_scalar_value(best_data.get("city")),
+    ]) or "")
+    final_city_adcode = str(get_first_non_empty([
+        normalize_scalar_value(correction_value(corrections, "city_adcode")),
+        normalize_scalar_value(input_data.get("city_adcode")),
+    ]) or "")
 
     name_confidence = float(dimensions.get("name", {}).get("confidence", 0.0))
     location_confidence = float(dimensions.get("location", {}).get("confidence", 0.0))
     category_confidence = float(dimensions.get("category", {}).get("confidence", 0.0))
     city_confidence = float(dimensions.get("administrative", {}).get("confidence", 1.0))
-    final_coordinates["confidence"] = location_confidence
-
-    final_name = str(get_first_non_empty(name_candidates) or "")
-    final_address = str(get_first_non_empty(address_candidates) or "")
-    final_category = str(get_first_non_empty(category_candidates) or "")
+    final_coordinates["confidence"] = float(corrections.get("coordinates", {}).get("confidence", location_confidence) or location_confidence)
 
     changes = []
-    for field in ("name", "address", "coordinates", "category"):
+    for field in CORRECTION_FIELDS:
         correction = corrections.get(field)
         if not isinstance(correction, dict):
             continue
         old_value = correction.get("original")
         new_value = correction.get("suggested")
-        if old_value is None and new_value is None:
+        reason = str(correction.get("reason") or "").strip()
+        if new_value is None or not reason or values_equal(old_value, new_value):
             continue
-        dimension_field = "location" if field == "coordinates" else field
         changes.append(
             {
                 "field": field,
-                "old_value": json.dumps(old_value, ensure_ascii=False, separators=(",", ":")) if isinstance(old_value, dict) else str(old_value),
-                "new_value": json.dumps(new_value, ensure_ascii=False, separators=(",", ":")) if isinstance(new_value, dict) else str(new_value),
-                "reason": f"derived from decision.dimensions.{dimension_field}",
+                "old_value": format_change_value(old_value),
+                "new_value": format_change_value(new_value),
+                "reason": reason,
             }
         )
 
@@ -244,14 +275,14 @@ def build_record(input_data: dict[str, Any], evidence: list[dict[str, Any]], dec
             "confidence": float(decision["overall"]["confidence"]),
             "final_values": {
                 "name": final_name,
-                "name_confidence": name_confidence,
+                "name_confidence": float(corrections.get("name", {}).get("confidence", name_confidence) or name_confidence),
                 "address": final_address,
-                "address_confidence": name_confidence,
+                "address_confidence": float(corrections.get("address", {}).get("confidence", location_confidence) or location_confidence),
                 "coordinates": final_coordinates,
                 "category": final_category,
-                "category_confidence": category_confidence,
-                "city": str(input_data["city"]),
-                "city_confidence": city_confidence,
+                "category_confidence": float(corrections.get("category", {}).get("confidence", category_confidence) or category_confidence),
+                "city": final_city,
+                "city_confidence": float(corrections.get("city", {}).get("confidence", city_confidence) or city_confidence),
             },
             "changes": changes,
         },
@@ -262,7 +293,7 @@ def build_record(input_data: dict[str, Any], evidence: list[dict[str, Any]], dec
             "created_at": created_at,
             "version_history": [
                 {
-                    "version": "1.6.0",
+                    "version": "1.6.7",
                     "timestamp": created_at,
                     "operator": "bigpoi-verification",
                     "action": "bundle_output",
@@ -280,19 +311,19 @@ def build_record(input_data: dict[str, Any], evidence: list[dict[str, Any]], dec
             "requires_periodic_review": str(decision["overall"]["status"]) != "accepted",
             "review_period_days": 365 if str(decision["overall"]["status"]) == "accepted" else 30,
             "tags": [
-                "contract:1.6.0",
+                "contract:1.6.7",
                 f"status:{decision['overall']['status']}",
                 f"poi_type:{input_data['poi_type']}",
             ],
         },
         "metadata": {
-            "skill_version": "1.6.0",
+            "skill_version": "1.6.7",
             "processing_time_ms": int(decision.get("processing_duration_ms", 0)),
             "data_sources": data_sources,
             "rules_applied": [f"{name}_dimension" for name in dimensions.keys()],
             "custom_fields": {
                 "task_id": str(input_data.get("task_id") or ""),
-                "contract_version": "1.6.0",
+                "contract_version": "1.6.7",
                 "run_id": run_id,
             },
         },
@@ -300,15 +331,16 @@ def build_record(input_data: dict[str, Any], evidence: list[dict[str, Any]], dec
         "updated_at": created_at,
     }
 
+    if final_city_adcode:
+        record["verification_result"]["final_values"]["city_adcode"] = final_city_adcode
     if input_data.get("address") is not None:
         record["input_data"]["address"] = input_data["address"]
-    if input_data.get("coordinates") is not None:
-        record["input_data"]["coordinates"] = input_data["coordinates"]
+    if input_coordinates is not None:
+        record["input_data"]["coordinates"] = input_coordinates
     if input_data.get("source") is not None:
         record["input_data"]["source"] = input_data["source"]
     if input_data.get("city_adcode") is not None:
         record["input_data"]["city_adcode"] = str(input_data["city_adcode"])
-        record["verification_result"]["final_values"]["city_adcode"] = str(input_data["city_adcode"])
 
     for dimension_name, dimension in dimensions.items():
         if isinstance(dimension, dict):
@@ -329,10 +361,8 @@ def find_latest_index(task_dir: str | Path) -> dict[str, Any] | None:
     files = sorted(Path(task_dir).glob("index_*.json"), key=lambda item: item.name, reverse=True)
     if not files:
         return None
-    return {
-        "latest": str(files[0]),
-        "all": [str(path) for path in files],
-    }
+    return {"latest": str(files[0]), "all": [str(path) for path in files]}
+
 
 def prune_empty(value: Any) -> Any:
     if isinstance(value, dict):

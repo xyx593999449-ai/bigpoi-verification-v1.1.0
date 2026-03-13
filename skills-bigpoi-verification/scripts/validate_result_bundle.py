@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
+from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parents[1]
@@ -16,6 +18,7 @@ if str(REPO_ROOT) not in sys.path:
 from bundle_common import (
     ALLOWED_DECISION_STATUS,
     ALLOWED_RECORD_STATUS,
+    CORRECTION_FIELDS,
     ensure_stdout_utf8,
     find_latest_index,
     is_iso_time,
@@ -26,6 +29,9 @@ from run_context import collect_item_run_ids
 from runtime_paths import build_task_dir, detect_workspace_root
 
 
+CJK_PATTERN = re.compile(r"[\u4e00-\u9fff]")
+
+
 def add_error(errors: list[str], message: str) -> None:
     errors.append(message)
 
@@ -34,7 +40,93 @@ def add_warning(warnings: list[str], message: str) -> None:
     warnings.append(message)
 
 
-def validate_decision(decision: dict, poi_id: str, expected_run_id: str, errors: list[str]) -> None:
+def normalize_scalar_value(value: Any) -> Any:
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped or None
+    return value
+
+
+def normalize_coordinate_value(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    normalized = {}
+    if value.get("longitude") is not None:
+        normalized["longitude"] = float(value["longitude"])
+    if value.get("latitude") is not None:
+        normalized["latitude"] = float(value["latitude"])
+    if value.get("coordinate_system"):
+        normalized["coordinate_system"] = str(value["coordinate_system"])
+    return normalized or None
+
+
+def values_equal(left: Any, right: Any) -> bool:
+    if isinstance(left, dict) or isinstance(right, dict):
+        return json.dumps(left or {}, ensure_ascii=False, sort_keys=True) == json.dumps(right or {}, ensure_ascii=False, sort_keys=True)
+    return normalize_scalar_value(left) == normalize_scalar_value(right)
+
+
+def format_change_value(value: Any) -> str:
+    if isinstance(value, dict):
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    if value is None:
+        return ""
+    return str(value)
+
+
+def validate_corrections_structure(corrections: Any, errors: list[str]) -> dict[str, dict[str, Any]]:
+    if corrections is None:
+        return {}
+    if not isinstance(corrections, dict):
+        add_error(errors, "decision.corrections must be an object")
+        return {}
+
+    normalized: dict[str, dict[str, Any]] = {}
+    for field, correction in corrections.items():
+        if field not in CORRECTION_FIELDS:
+            add_error(errors, f"decision.corrections.{field} is not supported")
+            continue
+        if not isinstance(correction, dict):
+            add_error(errors, f"decision.corrections.{field} must be an object")
+            continue
+        if "suggested" not in correction:
+            add_error(errors, f"decision.corrections.{field}.suggested is required")
+            continue
+        reason = str(correction.get("reason") or "").strip()
+        if not reason:
+            add_error(errors, f"decision.corrections.{field}.reason is required")
+        original = correction.get("original")
+        suggested = correction.get("suggested")
+        if field == "coordinates":
+            original = normalize_coordinate_value(original) if original is not None else None
+            suggested = normalize_coordinate_value(suggested)
+            if suggested is None:
+                add_error(errors, "decision.corrections.coordinates.suggested must include longitude and latitude")
+                continue
+        else:
+            original = normalize_scalar_value(original)
+            suggested = normalize_scalar_value(suggested)
+            if suggested is None:
+                add_error(errors, f"decision.corrections.{field}.suggested cannot be empty")
+                continue
+        if field in {"category", "city_adcode"} and suggested is not None and not re.fullmatch(r"\d{6}", str(suggested)):
+            add_error(errors, f"decision.corrections.{field}.suggested must be a 6-digit code")
+        if values_equal(original, suggested):
+            add_error(errors, f"decision.corrections.{field} must change the value")
+            continue
+        normalized_entry = {"original": original, "suggested": suggested, "reason": reason}
+        confidence = correction.get("confidence")
+        if confidence is not None:
+            confidence = float(confidence)
+            if confidence < 0 or confidence > 1:
+                add_error(errors, f"decision.corrections.{field}.confidence must be between 0 and 1")
+            else:
+                normalized_entry["confidence"] = confidence
+        normalized[field] = normalized_entry
+    return normalized
+
+
+def validate_decision(decision: dict, poi_id: str, expected_run_id: str, errors: list[str]) -> dict[str, dict[str, Any]]:
     for field in ("decision_id", "poi_id", "overall", "dimensions", "created_at"):
         if field not in decision:
             add_error(errors, f"decision.{field} is required")
@@ -52,11 +144,16 @@ def validate_decision(decision: dict, poi_id: str, expected_run_id: str, errors:
         if not isinstance(overall, dict):
             add_error(errors, "decision.overall must be an object")
         else:
-            for field in ("status", "confidence"):
+            for field in ("status", "confidence", "summary"):
                 if field not in overall:
                     add_error(errors, f"decision.overall.{field} is required")
             if overall.get("status") not in ALLOWED_DECISION_STATUS:
                 add_error(errors, "decision.overall.status is invalid")
+            summary = str(overall.get("summary") or "").strip()
+            if not summary:
+                add_error(errors, "decision.overall.summary is required")
+            elif not CJK_PATTERN.search(summary):
+                add_error(errors, "decision.overall.summary must be Chinese text")
     dimensions = decision.get("dimensions")
     if dimensions is not None:
         if not isinstance(dimensions, dict):
@@ -65,6 +162,7 @@ def validate_decision(decision: dict, poi_id: str, expected_run_id: str, errors:
             for field in ("existence", "name", "location", "category"):
                 if field not in dimensions:
                     add_error(errors, f"decision.dimensions.{field} is required")
+    return validate_corrections_structure(decision.get("corrections"), errors)
 
 
 def validate_evidence(evidence, poi_id: str, expected_run_id: str, errors: list[str]) -> None:
@@ -139,6 +237,9 @@ def validate_record(record: dict, expected_run_id: str, errors: list[str]) -> No
                     for field in ("name", "address", "coordinates", "category", "city"):
                         if field not in final_values:
                             add_error(errors, f"record.verification_result.final_values.{field} is required")
+            changes = verification_result.get("changes")
+            if changes is not None and not isinstance(changes, list):
+                add_error(errors, "record.verification_result.changes must be an array")
     audit_trail = record.get("audit_trail")
     if audit_trail is not None:
         if not isinstance(audit_trail, dict):
@@ -147,6 +248,41 @@ def validate_record(record: dict, expected_run_id: str, errors: list[str]) -> No
             for field in ("created_by", "created_at"):
                 if field not in audit_trail:
                     add_error(errors, f"record.audit_trail.{field} is required")
+
+
+def validate_record_alignment(record: dict, corrections: dict[str, dict[str, Any]], errors: list[str]) -> None:
+    verification_result = record.get("verification_result") if isinstance(record.get("verification_result"), dict) else {}
+    final_values = verification_result.get("final_values") if isinstance(verification_result.get("final_values"), dict) else {}
+    changes = verification_result.get("changes") if isinstance(verification_result.get("changes"), list) else []
+    change_by_field = {
+        str(item.get("field") or ""): item
+        for item in changes
+        if isinstance(item, dict) and str(item.get("field") or "").strip()
+    }
+
+    final_map = {
+        "name": final_values.get("name"),
+        "address": final_values.get("address"),
+        "coordinates": normalize_coordinate_value(final_values.get("coordinates")),
+        "category": final_values.get("category"),
+        "city": final_values.get("city"),
+        "city_adcode": final_values.get("city_adcode"),
+    }
+
+    for field, correction in corrections.items():
+        suggested = correction.get("suggested")
+        current_value = final_map.get(field)
+        if not values_equal(current_value, suggested):
+            add_error(errors, f"record.verification_result.final_values.{field} must match decision.corrections.{field}.suggested")
+            continue
+        change = change_by_field.get(field)
+        if not isinstance(change, dict):
+            add_error(errors, f"record.verification_result.changes must include field {field}")
+            continue
+        if format_change_value(suggested) != str(change.get("new_value") or ""):
+            add_error(errors, f"record.verification_result.changes[{field}].new_value must match decision correction")
+        if str(change.get("reason") or "").strip() != str(correction.get("reason") or "").strip():
+            add_error(errors, f"record.verification_result.changes[{field}].reason must match decision correction reason")
 
 
 def validate_index(index: dict, task_dir: Path, workspace_root: Path, poi_id: str, task_id: str, expected_run_id: str, errors: list[str]) -> None:
@@ -203,44 +339,18 @@ def main() -> int:
 
     if not task_dir.is_dir():
         errors.append(f"task_dir does not exist: {task_dir}")
-        json.dump(
-            {
-                "status": "failed",
-                "failed_stage": "parent_integration",
-                "reasons": errors,
-                "warnings": warnings,
-                "retry_action": "rerun only parent bundle writer, then rerun validator",
-            },
-            sys.stdout,
-            ensure_ascii=False,
-            indent=2,
-        )
+        json.dump({"status": "failed", "failed_stage": "parent_integration", "reasons": errors, "warnings": warnings, "retry_action": "rerun only parent bundle writer, then rerun validator"}, sys.stdout, ensure_ascii=False, indent=2)
         sys.stdout.write("\n")
         return 0
 
     resolved_task_dir = task_dir.resolve()
     task_id = resolved_task_dir.name
-    workspace_detection = detect_workspace_root(
-        workspace_hint=args.WorkspaceRoot,
-        related_paths=(resolved_task_dir,),
-        cwd=Path.cwd(),
-    )
+    workspace_detection = detect_workspace_root(workspace_hint=args.WorkspaceRoot, related_paths=(resolved_task_dir,), cwd=Path.cwd())
     workspace_root = workspace_detection.workspace_root.resolve()
     index_info = find_latest_index(resolved_task_dir)
     if index_info is None:
         errors.append("task_dir does not contain index_*.json")
-        json.dump(
-            {
-                "status": "failed",
-                "failed_stage": "parent_integration",
-                "reasons": errors,
-                "warnings": warnings,
-                "retry_action": "rerun only parent bundle writer, then rerun validator",
-            },
-            sys.stdout,
-            ensure_ascii=False,
-            indent=2,
-        )
+        json.dump({"status": "failed", "failed_stage": "parent_integration", "reasons": errors, "warnings": warnings, "retry_action": "rerun only parent bundle writer, then rerun validator"}, sys.stdout, ensure_ascii=False, indent=2)
         sys.stdout.write("\n")
         return 0
 
@@ -254,19 +364,7 @@ def main() -> int:
     index = read_json_file(index_path)
     if not isinstance(index, dict):
         errors.append("index file must contain an object")
-        json.dump(
-            {
-                "status": "failed",
-                "failed_stage": "parent_integration",
-                "reasons": errors,
-                "warnings": warnings,
-                "retry_action": "rerun only parent bundle writer, then rerun validator",
-                "task_dir": str(resolved_task_dir),
-            },
-            sys.stdout,
-            ensure_ascii=False,
-            indent=2,
-        )
+        json.dump({"status": "failed", "failed_stage": "parent_integration", "reasons": errors, "warnings": warnings, "retry_action": "rerun only parent bundle writer, then rerun validator", "task_dir": str(resolved_task_dir)}, sys.stdout, ensure_ascii=False, indent=2)
         sys.stdout.write("\n")
         return 0
 
@@ -278,19 +376,7 @@ def main() -> int:
     record = read_json_file(record_path) if record_path and record_path.is_file() else None
     if not isinstance(record, dict):
         errors.append("record file is missing or invalid")
-        json.dump(
-            {
-                "status": "failed",
-                "failed_stage": "parent_integration",
-                "reasons": errors,
-                "warnings": warnings,
-                "retry_action": "rerun only parent bundle writer, then rerun validator",
-                "task_dir": str(resolved_task_dir),
-            },
-            sys.stdout,
-            ensure_ascii=False,
-            indent=2,
-        )
+        json.dump({"status": "failed", "failed_stage": "parent_integration", "reasons": errors, "warnings": warnings, "retry_action": "rerun only parent bundle writer, then rerun validator", "task_dir": str(resolved_task_dir)}, sys.stdout, ensure_ascii=False, indent=2)
         sys.stdout.write("\n")
         return 0
 
@@ -300,10 +386,12 @@ def main() -> int:
         errors.append("bundle run_id is required in index or record")
     validate_record(record, bundle_run_id, errors)
 
+    decision = None
+    decision_corrections: dict[str, dict[str, Any]] = {}
     if decision_path and decision_path.is_file():
         decision = read_json_file(decision_path)
         if isinstance(decision, dict):
-            validate_decision(decision, poi_id, bundle_run_id, errors)
+            decision_corrections = validate_decision(decision, poi_id, bundle_run_id, errors)
         else:
             errors.append("decision file must contain an object")
     else:
@@ -315,12 +403,14 @@ def main() -> int:
     else:
         errors.append("evidence file is missing")
 
+    if isinstance(decision, dict):
+        validate_record_alignment(record, decision_corrections, errors)
     validate_index(index, resolved_task_dir, workspace_root, poi_id, task_id, bundle_run_id, errors)
 
     failed_stage = "complete"
     if any(message.startswith("evidence") for message in errors):
         failed_stage = "evidence_collection"
-    elif any(message.startswith("decision") for message in errors):
+    elif any(message.startswith("decision") or message.startswith("record.verification_result") for message in errors):
         failed_stage = "verification"
     elif errors:
         failed_stage = "parent_integration"
@@ -342,17 +432,9 @@ def main() -> int:
         "task_id": task_id,
         "run_id": bundle_run_id,
         "workspace_root": str(workspace_root),
-        "workspace_detection": {
-            "strategy": workspace_detection.strategy,
-            "matched_marker": workspace_detection.matched_marker,
-            "start_path": str(workspace_detection.start_path),
-        },
+        "workspace_detection": {"strategy": workspace_detection.strategy, "matched_marker": workspace_detection.matched_marker, "start_path": str(workspace_detection.start_path)},
         "index_path": str(index_path),
-        "files": {
-            "decision": str(decision_path) if decision_path else "",
-            "evidence": str(evidence_path) if evidence_path else "",
-            "record": str(record_path) if record_path else "",
-        },
+        "files": {"decision": str(decision_path) if decision_path else "", "evidence": str(evidence_path) if evidence_path else "", "record": str(record_path) if record_path else ""},
     }
     json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")

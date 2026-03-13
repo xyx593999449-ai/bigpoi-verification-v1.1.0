@@ -4,14 +4,24 @@
   "title": "POI核实记录模式",
   "description": "定义大POI核实技能的最终入库记录标准化格式，支持审计和责任追溯",
   "type": "object",
-  "required": ["record_id", "poi_id", "input_data", "verification_result", "audit_trail", "created_at"],
+  "required": [
+    "record_id",
+    "poi_id",
+    "run_id",
+    "input_data",
+    "verification_result",
+    "audit_trail",
+    "created_at"
+  ],
   "properties": {
     "record_id": {
       "type": "string",
       "description": "记录唯一标识符",
       "minLength": 1,
       "maxLength": 64,
-      "examples": ["REC_202401150001"]
+      "examples": [
+        "REC_202401150001"
+      ]
     },
     "poi_id": {
       "type": "string",
@@ -55,13 +65,24 @@
     "verification_result": {
       "type": "object",
       "description": "核实结果",
-      "required": ["status", "confidence", "final_values"],
+      "required": [
+        "status",
+        "confidence",
+        "final_values"
+      ],
       "properties": {
         "status": {
           "type": "string",
           "description": "核实状态",
-          "enum": ["verified", "modified", "rejected", "manual_review_pending"],
-          "examples": ["verified"]
+          "enum": [
+            "verified",
+            "modified",
+            "rejected",
+            "manual_review_pending"
+          ],
+          "examples": [
+            "verified"
+          ]
         },
         "confidence": {
           "type": "number",
@@ -125,7 +146,11 @@
               "type": "string",
               "description": "核实后的城市行政区划代码",
               "pattern": "^\\d{6}$",
-              "examples": ["110102", "310100", "420100"]
+              "examples": [
+                "110102",
+                "310100",
+                "420100"
+              ]
             },
             "city_confidence": {
               "type": "number",
@@ -157,7 +182,12 @@
                 "type": "string",
                 "description": "变更原因"
               }
-            }
+            },
+            "required": [
+              "field",
+              "new_value",
+              "reason"
+            ]
           }
         }
       }
@@ -178,12 +208,18 @@
     "audit_trail": {
       "type": "object",
       "description": "审计追踪信息",
-      "required": ["created_by", "created_at"],
+      "required": [
+        "created_by",
+        "created_at"
+      ],
       "properties": {
         "created_by": {
           "type": "string",
           "description": "创建者（系统或人工）",
-          "examples": ["system", "user_001"]
+          "examples": [
+            "system",
+            "user_001"
+          ]
         },
         "created_at": {
           "type": "string",
@@ -370,6 +406,12 @@
       "type": "string",
       "description": "记录过期时间（用于定期复核）",
       "format": "date-time"
+    },
+    "run_id": {
+      "type": "string",
+      "description": "??????????",
+      "minLength": 1,
+      "maxLength": 128
     }
   },
   "additionalProperties": false,
@@ -400,7 +442,7 @@
           "coordinates": {
             "longitude": 116.3723,
             "latitude": 39.9342,
-            "confidence": 0.90
+            "confidence": 0.9
           },
           "category": "090101",
           "category_confidence": 0.95,
@@ -411,7 +453,11 @@
         "changes": []
       },
       "decision_ref": "DEC_202401150001",
-      "evidence_refs": ["EVD_001", "EVD_002", "EVD_003"],
+      "evidence_refs": [
+        "EVD_001",
+        "EVD_002",
+        "EVD_003"
+      ],
       "audit_trail": {
         "created_by": "system",
         "created_at": "2024-01-15T08:40:05Z",
@@ -428,10 +474,10 @@
         "dimension_scores": {
           "existence": 0.95,
           "name": 1.0,
-          "location": 0.90,
+          "location": 0.9,
           "category": 0.95,
           "administrative": 0.95,
-          "timeliness": 0.90
+          "timeliness": 0.9
         },
         "evidence_quality": 0.93,
         "source_diversity": 0.85
@@ -441,13 +487,25 @@
         "is_disputed": false,
         "requires_periodic_review": true,
         "review_period_days": 365,
-        "tags": ["三甲", "综合医院", "高置信度"]
+        "tags": [
+          "三甲",
+          "综合医院",
+          "高置信度"
+        ]
       },
       "metadata": {
         "skill_version": "1.0.0",
         "processing_time_ms": 5000,
-        "data_sources": ["NHC", "AMAP", "BAIDU"],
-        "rules_applied": ["name_match", "location_verify", "category_check"]
+        "data_sources": [
+          "NHC",
+          "AMAP",
+          "BAIDU"
+        ],
+        "rules_applied": [
+          "name_match",
+          "location_verify",
+          "category_check"
+        ]
       },
       "created_at": "2024-01-15T08:40:05Z",
       "updated_at": "2024-01-15T08:40:05Z",
