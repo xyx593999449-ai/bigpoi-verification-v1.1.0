@@ -1,6 +1,32 @@
 # 更新履历 (CHANGELOG)
 
 本文件用于记录 `bigpoi-verification` skill 包的所有重大变更、修复与改进。
+## [1.6.8] - 2026-03-16
+
+### 变更 (Changed) - 地址与坐标维度拆分
+- **拆分 verification 维度**：`verification/scripts/write_decision_output.py` 现在将 `address` 与 `coordinates` 作为独立维度进行校验和汇总，`location` 仅保留为兼容聚合维度。
+- **更新父技能成包置信度**：`skills-bigpoi-verification/scripts/bundle_common.py` 现在分别使用 `dimensions.address.confidence` 与 `dimensions.coordinates.confidence` 写入地址和坐标置信度，不再共用 `location` 结果。
+- **同步更新契约与降级规则**：`decision.schema.json`、`record.schema.json`、`verification/config/thresholds.yaml`、`verification/config/downgrade.yaml` 已切换到 `address` / `coordinates` 维度口径。
+- **补充回库统计字段**：`write-pg-verified/scripts/data_converter.py` 现在额外输出 `address_result` 与 `coordinates_result`，同时保留 `location_result` 兼容字段。
+
+### 变更 (Changed) - decision seed 合同收紧
+- **要求上游显式提供维度**：`decision seed.dimensions` 必须显式提供 `address` 和 `coordinates`，不再允许仅提供 `location` 由脚本自动拆解。
+- **同步更新技能说明**：`verification/SKILL.md`、`skills-bigpoi-verification/SKILL.md` 与 `README.md` 已同步说明新的上游输入要求与兼容边界。
+
+### 影响文件
+- `verification/scripts/write_decision_output.py`
+- `verification/config/thresholds.yaml`
+- `verification/config/downgrade.yaml`
+- `skills-bigpoi-verification/scripts/bundle_common.py`
+- `skills-bigpoi-verification/scripts/validate_result_bundle.py`
+- `skills-bigpoi-verification/schema/decision.schema.json`
+- `skills-bigpoi-verification/schema/record.schema.json`
+- `write-pg-verified/scripts/data_converter.py`
+- `verification/SKILL.md`
+- `skills-bigpoi-verification/SKILL.md`
+- `README.md`
+
+---
 ## [1.6.7] - 2026-03-13
 
 ### 修复 (Fixed) - 回库结果稳定性
