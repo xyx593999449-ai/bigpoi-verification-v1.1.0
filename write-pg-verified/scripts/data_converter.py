@@ -189,6 +189,8 @@ class DataConverter:
             "overall_confidence": overall.get("confidence", 0.0),
             "existence_result": dimensions.get("existence", {}).get("result", ""),
             "name_result": dimensions.get("name", {}).get("result", ""),
+            "address_result": dimensions.get("address", {}).get("result", dimensions.get("location", {}).get("result", "")),
+            "coordinates_result": dimensions.get("coordinates", {}).get("result", dimensions.get("location", {}).get("result", "")),
             "location_result": dimensions.get("location", {}).get("result", ""),
             "category_result": dimensions.get("category", {}).get("result", ""),
             "has_corrections": correction_count > 0,

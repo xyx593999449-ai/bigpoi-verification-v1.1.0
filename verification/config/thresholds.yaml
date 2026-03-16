@@ -321,7 +321,7 @@ decision:
     auto_accept:
       min_confidence: 0.85
       max_uncertain_dimensions: 0
-      required_dimensions: ["existence", "name", "location"]
+      required_dimensions: ["existence", "name", "address", "coordinates"]
     
     # 人工复核阈值
     manual_review:

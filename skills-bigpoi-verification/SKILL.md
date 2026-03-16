@@ -53,6 +53,8 @@ description: 面向大 POI 核实任务的父技能。用于编排 `evidence-col
 2. 读取输入并检查是否属于大 POI 范围。
 3. 调用 `evidence-collection`，让其先完成并行采集、图商原始结果相关性初筛、缺失图商补采、补采结果初筛、归并规范化，再通过 `write_evidence_output.py` 生成正式 `evidence_*.json` 文件。
 4. 调用 `verification`，输入是 `input 文件 + evidence_path`，产出唯一正式产物 `decision_*.json`。
+   - `decision.dimensions` 必须明确区分 `address` 与 `coordinates` 两个维度
+   - 如需保留 `location`，只能作为兼容汇总维度，不能代替前两者
 5. 运行以下脚本生成最终输出包：
 
 ```bash
@@ -119,6 +121,7 @@ python skills-bigpoi-verification/scripts/init_run_context.py -InputPath <input.
 ## 回库一致性校验
 
 - 父技能在最终成包前必须校验 `decision.corrections -> record.verification_result.final_values -> record.verification_result.changes` 三者一致。
+- 父技能同时必须校验 `decision.dimensions.address` 与 `decision.dimensions.coordinates` 均存在，`location` 只能作为兼容字段。
 - 若 `decision.corrections` 中存在某字段修正，`record.verification_result.final_values` 必须使用对应的 `suggested` 值。
 - `record.verification_result.changes` 必须逐项记录字段、旧值、新值和变更原因。
 - 如果三者任一不一致，最终规格校验必须失败，并以 `failed_stage = verification` 打回核实阶段重新执行。

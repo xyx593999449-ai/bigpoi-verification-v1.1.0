@@ -216,9 +216,11 @@ def build_record(input_data: dict[str, Any], evidence: list[dict[str, Any]], dec
 
     name_confidence = float(dimensions.get("name", {}).get("confidence", 0.0))
     location_confidence = float(dimensions.get("location", {}).get("confidence", 0.0))
+    address_confidence = float(dimensions.get("address", {}).get("confidence", location_confidence))
+    coordinates_confidence = float(dimensions.get("coordinates", {}).get("confidence", location_confidence))
     category_confidence = float(dimensions.get("category", {}).get("confidence", 0.0))
     city_confidence = float(dimensions.get("administrative", {}).get("confidence", 1.0))
-    final_coordinates["confidence"] = float(corrections.get("coordinates", {}).get("confidence", location_confidence) or location_confidence)
+    final_coordinates["confidence"] = float(corrections.get("coordinates", {}).get("confidence", coordinates_confidence) or coordinates_confidence)
 
     changes = []
     for field in CORRECTION_FIELDS:
@@ -277,7 +279,7 @@ def build_record(input_data: dict[str, Any], evidence: list[dict[str, Any]], dec
                 "name": final_name,
                 "name_confidence": float(corrections.get("name", {}).get("confidence", name_confidence) or name_confidence),
                 "address": final_address,
-                "address_confidence": float(corrections.get("address", {}).get("confidence", location_confidence) or location_confidence),
+                "address_confidence": float(corrections.get("address", {}).get("confidence", address_confidence) or address_confidence),
                 "coordinates": final_coordinates,
                 "category": final_category,
                 "category_confidence": float(corrections.get("category", {}).get("confidence", category_confidence) or category_confidence),
@@ -293,7 +295,7 @@ def build_record(input_data: dict[str, Any], evidence: list[dict[str, Any]], dec
             "created_at": created_at,
             "version_history": [
                 {
-                    "version": "1.6.7",
+                    "version": "1.6.8",
                     "timestamp": created_at,
                     "operator": "bigpoi-verification",
                     "action": "bundle_output",
@@ -311,19 +313,19 @@ def build_record(input_data: dict[str, Any], evidence: list[dict[str, Any]], dec
             "requires_periodic_review": str(decision["overall"]["status"]) != "accepted",
             "review_period_days": 365 if str(decision["overall"]["status"]) == "accepted" else 30,
             "tags": [
-                "contract:1.6.7",
+                "contract:1.6.8",
                 f"status:{decision['overall']['status']}",
                 f"poi_type:{input_data['poi_type']}",
             ],
         },
         "metadata": {
-            "skill_version": "1.6.7",
+            "skill_version": "1.6.8",
             "processing_time_ms": int(decision.get("processing_duration_ms", 0)),
             "data_sources": data_sources,
             "rules_applied": [f"{name}_dimension" for name in dimensions.keys()],
             "custom_fields": {
                 "task_id": str(input_data.get("task_id") or ""),
-                "contract_version": "1.6.7",
+                "contract_version": "1.6.8",
                 "run_id": run_id,
             },
         },

@@ -18,6 +18,17 @@ from run_context import collect_item_run_ids, require_context
 
 
 ALLOWED_CORRECTION_FIELDS = ("name", "address", "coordinates", "category", "city", "city_adcode")
+REQUIRED_DIMENSIONS = ("existence", "name", "address", "coordinates", "category")
+DIMENSION_LABELS = {
+    "existence": "\u5b58\u5728\u6027",
+    "name": "\u540d\u79f0",
+    "address": "\u5730\u5740",
+    "coordinates": "\u5750\u6807",
+    "location": "\u4f4d\u7f6e",
+    "category": "\u5206\u7c7b",
+    "administrative": "\u884c\u653f\u533a",
+    "timeliness": "\u65f6\u6548\u6027",
+}
 CHANGE_SIGNAL_PATTERN = re.compile(
     r"(\u5efa\u8bae(?:\u4fee\u6539|\u66f4\u6b63|\u8c03\u6574|\u66f4\u65b0|\u8865\u5145)|\u5e94\u6539\u4e3a|\u4fee\u6b63\u4e3a|\u4fee\u6539\u4e3a|\u9700\u6539\u4e3a|\u5efa\u8bae\u4f7f\u7528)"
 )
@@ -172,19 +183,81 @@ def validate_dimension(dimension: dict, name: str, errors: list[str]) -> None:
             add_error(errors, f"seed.dimensions.{name}.score must be between 0 and 1")
 
 
+def clone_dimension(dimension: dict) -> dict:
+    return json.loads(json.dumps(dimension, ensure_ascii=False))
+
+
+def aggregate_location_dimension(address_dimension: dict, coordinates_dimension: dict) -> dict:
+    result_values = [address_dimension.get("result"), coordinates_dimension.get("result")]
+    if "fail" in result_values:
+        result = "fail"
+    elif "uncertain" in result_values:
+        result = "uncertain"
+    else:
+        result = "pass"
+
+    confidences = [
+        float(dimension.get("confidence", 0.0))
+        for dimension in (address_dimension, coordinates_dimension)
+        if dimension.get("confidence") is not None
+    ]
+    scores = [
+        float(dimension.get("score", dimension.get("confidence", 0.0)))
+        for dimension in (address_dimension, coordinates_dimension)
+        if dimension.get("score") is not None or dimension.get("confidence") is not None
+    ]
+
+    location_dimension = {
+        "result": result,
+        "confidence": round(min(confidences), 4) if confidences else 0.0,
+        "details": {"source_dimensions": ["address", "coordinates"]},
+    }
+    if scores:
+        location_dimension["score"] = round(min(scores), 4)
+    return location_dimension
+
+
+def reconcile_dimensions(raw_dimensions: dict, errors: list[str]) -> dict:
+    normalized = {}
+    for name, dimension in raw_dimensions.items():
+        normalized[name] = clone_dimension(dimension) if isinstance(dimension, dict) else dimension
+
+    location_dimension = normalized.get("location")
+    if not isinstance(normalized.get("address"), dict) and isinstance(location_dimension, dict):
+        normalized["address"] = clone_dimension(location_dimension)
+    if not isinstance(normalized.get("coordinates"), dict) and isinstance(location_dimension, dict):
+        normalized["coordinates"] = clone_dimension(location_dimension)
+
+    address_dimension = normalized.get("address")
+    coordinates_dimension = normalized.get("coordinates")
+    if not isinstance(address_dimension, dict):
+        add_error(errors, "seed.dimensions.address is required")
+    if not isinstance(coordinates_dimension, dict):
+        add_error(errors, "seed.dimensions.coordinates is required")
+
+    if isinstance(address_dimension, dict) and isinstance(coordinates_dimension, dict):
+        normalized["location"] = aggregate_location_dimension(address_dimension, coordinates_dimension)
+
+    return normalized
+
+
 def measure_overall_confidence(dimensions: dict) -> float:
     weights = {
         "existence": 0.25,
         "name": 0.25,
-        "location": 0.20,
+        "address": 0.10,
+        "coordinates": 0.10,
         "category": 0.15,
         "administrative": 0.10,
         "timeliness": 0.05,
+        "location": 0.0,
     }
     weighted_sum = 0.0
     total_weight = 0.0
     for name, dimension in dimensions.items():
-        weight = weights.get(name, 0.1)
+        weight = weights.get(name, 0.0)
+        if weight <= 0:
+            continue
         weighted_sum += float(dimension["confidence"]) * weight
         total_weight += weight
     if total_weight == 0:
@@ -193,13 +266,14 @@ def measure_overall_confidence(dimensions: dict) -> float:
 
 
 def infer_status(dimensions: dict, overall_confidence: float) -> str:
+    relevant_dimensions = [dimension for name, dimension in dimensions.items() if name != "location"]
     if dimensions["existence"]["result"] == "fail":
         return "rejected"
     if overall_confidence < 0.6:
         return "manual_review"
-    if any(dimension["result"] == "fail" for dimension in dimensions.values()):
+    if any(dimension["result"] == "fail" for dimension in relevant_dimensions):
         return "manual_review"
-    if any(dimension["result"] == "uncertain" for dimension in dimensions.values()):
+    if any(dimension["result"] == "uncertain" for dimension in relevant_dimensions):
         return "downgraded"
     return "accepted"
 
@@ -351,8 +425,8 @@ def normalize_corrections(seed: dict, poi: dict, errors: list[str]) -> dict:
 
 
 def get_summary(status: str, confidence: float, dimensions: dict, corrections: dict) -> str:
-    failed = [name for name, dimension in dimensions.items() if dimension["result"] == "fail"]
-    uncertain = [name for name, dimension in dimensions.items() if dimension["result"] == "uncertain"]
+    failed = [DIMENSION_LABELS.get(name, name) for name, dimension in dimensions.items() if name != "location" and dimension["result"] == "fail"]
+    uncertain = [DIMENSION_LABELS.get(name, name) for name, dimension in dimensions.items() if name != "location" and dimension["result"] == "uncertain"]
     confidence_text = f"{confidence:.2f}"
     correction_count = len(corrections)
     if status == "accepted":
@@ -415,7 +489,8 @@ def main() -> int:
     if not isinstance(dimensions, dict):
         add_error(errors, "seed.dimensions is required and must be an object")
     else:
-        for name in ("existence", "name", "location", "category"):
+        dimensions = reconcile_dimensions(dimensions, errors)
+        for name in REQUIRED_DIMENSIONS:
             if not isinstance(dimensions.get(name), dict):
                 add_error(errors, f"seed.dimensions.{name} is required")
             else:
@@ -474,7 +549,7 @@ def main() -> int:
         "created_at": created_at,
         "processed_at": processed_at or created_at,
         "processing_duration_ms": int(seed.get("processing_duration_ms", 0)),
-        "version": str(seed.get("version") or "1.6.7"),
+        "version": str(seed.get("version") or "1.6.8"),
         "metadata": prune_empty({"task_id": resolved_task_id, "seed_created_at": (seed_context or {}).get("created_at")}),
     }
     if "downgrade_info" in seed:

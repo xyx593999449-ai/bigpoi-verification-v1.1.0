@@ -159,7 +159,7 @@ def validate_decision(decision: dict, poi_id: str, expected_run_id: str, errors:
         if not isinstance(dimensions, dict):
             add_error(errors, "decision.dimensions must be an object")
         else:
-            for field in ("existence", "name", "location", "category"):
+            for field in ("existence", "name", "address", "coordinates", "category"):
                 if field not in dimensions:
                     add_error(errors, f"decision.dimensions.{field} is required")
     return validate_corrections_structure(decision.get("corrections"), errors)

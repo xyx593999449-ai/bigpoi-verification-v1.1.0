@@ -88,7 +88,8 @@
       "required": [
         "existence",
         "name",
-        "location",
+        "address",
+        "coordinates",
         "category"
       ],
       "properties": {
@@ -96,6 +97,12 @@
           "$ref": "#/definitions/dimension_result"
         },
         "name": {
+          "$ref": "#/definitions/dimension_result"
+        },
+        "address": {
+          "$ref": "#/definitions/dimension_result"
+        },
+        "coordinates": {
           "$ref": "#/definitions/dimension_result"
         },
         "location": {
@@ -510,6 +517,14 @@
             "matched_value": "北京大学第一医院",
             "similarity": 1.0
           }
+        },
+        "address": {
+          "result": "pass",
+          "confidence": 0.9
+        },
+        "coordinates": {
+          "result": "pass",
+          "confidence": 0.9
         },
         "location": {
           "result": "pass",

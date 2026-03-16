@@ -477,7 +477,9 @@
           "location": 0.9,
           "category": 0.95,
           "administrative": 0.95,
-          "timeliness": 0.9
+          "timeliness": 0.9,
+          "address": 0.9,
+          "coordinates": 0.9
         },
         "evidence_quality": 0.93,
         "source_diversity": 0.85
@@ -503,7 +505,8 @@
         ],
         "rules_applied": [
           "name_match",
-          "location_verify",
+          "address_verify",
+          "coordinates_verify",
           "category_check"
         ]
       },

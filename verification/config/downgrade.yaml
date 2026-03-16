@@ -54,7 +54,7 @@ triggers:
       severity: "high"
       criteria:
         metric: "dimension_confidence"
-        dimensions: ["existence", "name", "location"]
+        dimensions: ["existence", "name", "address", "coordinates"]
         operator: "<"
         threshold: 0.70
         match_mode: "any"  # any:任一维度满足即触发, all:所有维度满足才触发
@@ -188,7 +188,7 @@ triggers:
         metric: "dimension_failure_count"
         operator: ">="
         threshold: 2
-        dimensions: ["existence", "name", "location", "category"]
+        dimensions: ["existence", "name", "address", "coordinates", "category"]
         status: ["fail", "uncertain"]
       action: "manual_review"
       message: "{count}个维度出现异常，需人工综合判断"

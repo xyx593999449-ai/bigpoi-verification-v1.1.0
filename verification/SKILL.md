@@ -55,9 +55,11 @@ description: 面向大 POI 核实流程的子技能。用于基于输入 POI 文
 2. 按维度形成结构化判断，最少覆盖：
    - `existence`
    - `name`
-   - `location`
+   - `address`
+   - `coordinates`
    - `category`
-3. 只有证据足够时才补充：
+3. 可选保留 `location` 作为兼容汇总维度，但其结论必须由 `address` 与 `coordinates` 聚合生成，不能再单独作为地址和坐标的唯一判断依据。
+4. 只有证据足够时才补充：
    - `administrative`
    - `timeliness`
 4. 先写一个精简的 `decision seed` 中间文件，内容只放这些字段：

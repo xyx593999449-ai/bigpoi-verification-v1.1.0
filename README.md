@@ -294,3 +294,11 @@ python skills-bigpoi-verification/scripts/validate_result_bundle.py -TaskDir <ou
 - 只要核实结果包含建议修改，就必须在 `decision.corrections` 中提供对应的结构化修正，不能只写“建议修改 xxx”这类自然语言。
 - 父技能生成 `record` 时，`record.verification_result.final_values` 必须严格反映 `decision.corrections` 中的最终建议值。
 - `write-pg-verified` 使用 `record.verification_result.changes` 生成 `changes_made`，并使用 `record.verification_result.final_values` 写入成果字段。
+## 地址与坐标维度拆分
+
+从 `1.6.8` 开始，`verification` 子技能需要将地址和坐标分开判断：
+
+- `decision.dimensions.address` 用于表达地址文本与行政区信息是否可信
+- `decision.dimensions.coordinates` 用于表达坐标合法性、偏差距离与坐标系是否可信
+- `decision.dimensions.location` 如仍保留，仅作为兼容聚合维度，不再单独作为地址与坐标的唯一判断依据。
+
