@@ -222,12 +222,6 @@ def reconcile_dimensions(raw_dimensions: dict, errors: list[str]) -> dict:
     for name, dimension in raw_dimensions.items():
         normalized[name] = clone_dimension(dimension) if isinstance(dimension, dict) else dimension
 
-    location_dimension = normalized.get("location")
-    if not isinstance(normalized.get("address"), dict) and isinstance(location_dimension, dict):
-        normalized["address"] = clone_dimension(location_dimension)
-    if not isinstance(normalized.get("coordinates"), dict) and isinstance(location_dimension, dict):
-        normalized["coordinates"] = clone_dimension(location_dimension)
-
     address_dimension = normalized.get("address")
     coordinates_dimension = normalized.get("coordinates")
     if not isinstance(address_dimension, dict):

@@ -58,8 +58,9 @@ description: 面向大 POI 核实流程的子技能。用于基于输入 POI 文
    - `address`
    - `coordinates`
    - `category`
-3. 可选保留 `location` 作为兼容汇总维度，但其结论必须由 `address` 与 `coordinates` 聚合生成，不能再单独作为地址和坐标的唯一判断依据。
-4. 只有证据足够时才补充：
+3. `decision seed.dimensions` 必须显式提供 `address` 与 `coordinates` 两个维度，不允许只写 `location` 由脚本反推。
+4. 可选保留 `location` 作为兼容汇总维度，但其结论必须由 `address` 与 `coordinates` 聚合生成，不能再单独作为地址和坐标的唯一判断依据。
+5. 只有证据足够时才补充：
    - `administrative`
    - `timeliness`
 4. 先写一个精简的 `decision seed` 中间文件，内容只放这些字段：
@@ -131,3 +132,4 @@ python verification/scripts/write_decision_output.py -PoiPath <input.json> -Evid
 - `corrections` 仅允许包含 `name`、`address`、`coordinates`、`category`、`city`、`city_adcode`。
 - 每个修正项必须包含 `suggested` 与 `reason`，`original` 缺失时也必须由脚本补齐原始值。
 - 如果 seed 文本中出现修改信号但没有 `corrections`，`write_decision_output.py` 必须直接失败，不允许生成正式 `decision_*.json`。
+- `seed.dimensions.address` 和 `seed.dimensions.coordinates` 必须由上游显式写入，不允许仅提供 `location` 让脚本自动填充。

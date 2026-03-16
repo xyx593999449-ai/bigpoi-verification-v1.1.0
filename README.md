@@ -300,5 +300,6 @@ python skills-bigpoi-verification/scripts/validate_result_bundle.py -TaskDir <ou
 
 - `decision.dimensions.address` 用于表达地址文本与行政区信息是否可信
 - `decision.dimensions.coordinates` 用于表达坐标合法性、偏差距离与坐标系是否可信
+- `decision seed.dimensions` 必须显式提供 `address` 和 `coordinates`，不允许只提供 `location` 由脚本自动拆解。
 - `decision.dimensions.location` 如仍保留，仅作为兼容聚合维度，不再单独作为地址与坐标的唯一判断依据。
 

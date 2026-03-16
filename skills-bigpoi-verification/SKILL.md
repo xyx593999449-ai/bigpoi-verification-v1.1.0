@@ -54,6 +54,7 @@ description: 面向大 POI 核实任务的父技能。用于编排 `evidence-col
 3. 调用 `evidence-collection`，让其先完成并行采集、图商原始结果相关性初筛、缺失图商补采、补采结果初筛、归并规范化，再通过 `write_evidence_output.py` 生成正式 `evidence_*.json` 文件。
 4. 调用 `verification`，输入是 `input 文件 + evidence_path`，产出唯一正式产物 `decision_*.json`。
    - `decision.dimensions` 必须明确区分 `address` 与 `coordinates` 两个维度
+   - `decision seed` 必须由上游显式写入 `address` 与 `coordinates`，不允许只提供 `location`
    - 如需保留 `location`，只能作为兼容汇总维度，不能代替前两者
 5. 运行以下脚本生成最终输出包：
 
