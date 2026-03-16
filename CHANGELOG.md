@@ -1,6 +1,34 @@
 # 更新履历 (CHANGELOG)
 
 本文件用于记录 `bigpoi-verification` skill 包的所有重大变更、修复与改进。
+## [1.6.9] - 2026-03-16
+
+### 修复 (Fixed) - run_context 脚本归属与 skill 自包含
+- **run_context 下沉到各 skill 目录**：新增 `skills-bigpoi-verification/scripts/run_context.py`、`evidence-collection/scripts/run_context.py`、`verification/scripts/run_context.py`，不再依赖仓库根目录共享脚本。
+- **移除跨 skill 根目录导入**：`init_run_context.py`、`write_result_bundle.py`、`validate_result_bundle.py`、`call_internal_proxy.py`、`call_map_vendor.py`、`merge_evidence_collection_outputs.py`、`write_evidence_output.py`、`write_map_relevance_review.py`、`write_decision_output.py` 现在只从各自 `scripts/` 目录加载 `run_context.py`。
+- **删除仓库根目录旧模块**：移除根目录 `run_context.py`，避免 skill 单独安装时出现隐式仓库布局依赖。
+- **文档同步更新**：`README.md`、`skills-bigpoi-verification/SKILL.md`、`evidence-collection/SKILL.md`、`verification/SKILL.md` 已补充本地 `run_context.py` 的目录归属说明。
+
+### 影响文件
+- `skills-bigpoi-verification/scripts/run_context.py`
+- `evidence-collection/scripts/run_context.py`
+- `verification/scripts/run_context.py`
+- `skills-bigpoi-verification/scripts/init_run_context.py`
+- `skills-bigpoi-verification/scripts/write_result_bundle.py`
+- `skills-bigpoi-verification/scripts/validate_result_bundle.py`
+- `evidence-collection/scripts/call_internal_proxy.py`
+- `evidence-collection/scripts/call_map_vendor.py`
+- `evidence-collection/scripts/merge_evidence_collection_outputs.py`
+- `evidence-collection/scripts/write_evidence_output.py`
+- `evidence-collection/scripts/write_map_relevance_review.py`
+- `verification/scripts/write_decision_output.py`
+- `README.md`
+- `skills-bigpoi-verification/SKILL.md`
+- `evidence-collection/SKILL.md`
+- `verification/SKILL.md`
+
+---
+
 ## [1.6.8] - 2026-03-16
 
 ### 变更 (Changed) - 地址与坐标维度拆分

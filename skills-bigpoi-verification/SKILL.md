@@ -23,6 +23,7 @@ description: 面向大 POI 核实任务的父技能。用于编排 `evidence-col
 - `skills-bigpoi-verification/scripts/validate_result_bundle.py`
 - `skills-bigpoi-verification/scripts/runtime_paths.py`
 - `skills-bigpoi-verification/scripts/init_run_context.py`
+- `skills-bigpoi-verification/scripts/run_context.py`
 
 禁止行为：
 

@@ -7,11 +7,8 @@ import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parents[1]
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
 
 from run_context import attach_context, get_context, require_context
 from evidence_collection_common import ensure_stdout_utf8, read_json_file, utc_iso_now, write_json_file

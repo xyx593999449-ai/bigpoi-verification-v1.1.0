@@ -22,6 +22,7 @@ description: 面向大 POI 核实流程的子技能。用于基于输入 POI 文
 必须使用：
 
 - `verification/scripts/write_decision_output.py`
+- `verification/scripts/run_context.py`
 
 禁止行为：
 

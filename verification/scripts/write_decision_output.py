@@ -10,9 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
 
 from run_context import collect_item_run_ids, require_context
 

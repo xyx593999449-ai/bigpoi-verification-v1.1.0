@@ -20,6 +20,9 @@
 - `skills-bigpoi-verification/scripts/validate_result_bundle.py`
 - `skills-bigpoi-verification/scripts/init_run_context.py`
 - `skills-bigpoi-verification/scripts/runtime_paths.py`
+- `skills-bigpoi-verification/scripts/run_context.py`
+- `evidence-collection/scripts/run_context.py`
+- `verification/scripts/run_context.py`
 
 ## Claude Code 技能配置方式
 
