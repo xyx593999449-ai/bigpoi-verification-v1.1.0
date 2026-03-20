@@ -1,0 +1,30 @@
+version: 2.0.0
+rules:
+  - id: R1
+    name: 存在性一致性检查
+    category: existence
+    file: decision_tables.json
+  - id: R2
+    name: 名称一致性检查
+    category: name
+    file: decision_tables.json
+  - id: R3
+    name: 坐标一致性检查
+    category: location
+    file: decision_tables.json
+  - id: R4
+    name: 地址一致性检查
+    category: address
+    file: decision_tables.json
+  - id: R5
+    name: 行政区划一致性检查
+    category: administrative
+    file: decision_tables.json
+  - id: R6
+    name: 类型一致性检查
+    category: category
+    file: decision_tables.json
+  - id: R7
+    name: 人工核实一致性检查
+    category: downgrade_consistency
+    file: decision_tables.json

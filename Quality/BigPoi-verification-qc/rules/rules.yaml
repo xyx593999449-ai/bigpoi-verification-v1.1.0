@@ -1,0 +1,45 @@
+version: 2.0.0
+description: BigPOI QC deterministic rule registry v2.0
+
+rules:
+  - id: R1
+    name: 存在性一致性检查
+    dimension: existence
+    severity: high
+    description: 基于存在性证据和有效证据数量判断 record.existence 是否可信
+
+  - id: R2
+    name: 名称一致性检查
+    dimension: name
+    severity: high
+    description: 基于名称相似度、证据数量和是否存在明显冲突判断 record.name 是否可信
+
+  - id: R3
+    name: 坐标一致性检查
+    dimension: location
+    severity: high
+    description: 仅基于经纬度偏离、坐标证据数量和跨边界情况判断坐标是否可信
+
+  - id: R4
+    name: 地址一致性检查
+    dimension: address
+    severity: high
+    description: 基于地址文本、门牌号、街道信息和歧义情况判断 record.location.address 是否可信
+
+  - id: R5
+    name: 行政区划一致性检查
+    dimension: administrative
+    severity: high
+    description: 基于省市区是否一致及与坐标、地址的关系判断行政区划是否可信
+
+  - id: R6
+    name: 类型一致性检查
+    dimension: category
+    severity: medium
+    description: 基于类型匹配度和业务冲突判断 record.category 是否可信
+
+  - id: R7
+    name: 人工核实一致性检查
+    dimension: downgrade_consistency
+    severity: medium
+    description: 对比 QC 的人工核实需求与上游人工核实决策是否一致

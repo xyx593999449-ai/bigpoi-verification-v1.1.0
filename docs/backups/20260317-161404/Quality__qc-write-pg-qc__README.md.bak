@@ -1,0 +1,156 @@
+# 质检结果写库技能说明
+
+## 技能概览
+
+质检流程中有两个写库技能，分别用于不同的场景：
+
+### 1. **qc-write-pg-qc** (新建) ✅ - 推荐使用
+
+**用途**：将质检结果更新到 `poi_qc_zk` 质检表
+
+**输入方式**：**文件驱动 + 索引文件** - 通过索引文件定位并读取 JSON 结果
+- 支持指定完整文件路径（直接模式）
+- 支持通过索引文件自动定位（推荐模式）
+- 从 `results_index.json` 索引中读取实际文件路径
+
+**特点**：
+- ✅ 仅支持文件输入（推荐，符合框架设计）
+- ✅ 参照产品 write-pg-verified 的模式
+- ✅ 支持 JSONB 完整数据存储
+- ✅ 自动提取统计字段
+- ✅ 幂等性保证（重复执行不会产生重复）
+- ✅ 原子性事务（单张表，所有字段同步更新）
+
+**调用方式**：
+```python
+from SKILL import execute
+
+# 方式1：指定文件路径（不推荐）
+result = execute({
+    'task_id': '219A8C6D8C334629A7E1F164D514C381',
+    'result_file': 'output/results/219A8C6D8C334629A7E1F164D514C381/20260304_103000_219A8C6D8C334629A7E1F164D514C381.complete.json'
+})
+
+# 方式2：通过索引文件自动定位（推荐）✅
+result = execute({
+    'task_id': '219A8C6D8C334629A7E1F164D514C381',
+    'result_dir': 'output/results'  # 从 results_index.json 读取完整文件路径
+})
+```
+
+**工作流程**：
+- 提供 `result_dir` 时，技能自动定位到 `output/results/{task_id}/results_index.json`
+- 在索引中查找对应 task_id 的最新记录
+- 从索引的 `result_files.complete` 字段获取实际文件路径
+- 读取完整结果并进行数据转换和入库
+
+**使用场景**：
+- 生产环境：质检完成后，自动将结果写入数据库
+- 批量处理：批量从文件中读取并写入
+- 与框架集成：质检技能输出 → 本技能读取 → 数据入库
+
+---
+
+### 2. **qc-write-pg-bigpoi** (现有)
+
+**用途**：原始的直接数据写入模式
+
+**输入方式**：**数据驱动** - 直接接收输入参数
+
+**特点**：
+- ⚠️ 支持直接数据输入（参数方式）
+- ⚠️ 需要在调用时提供完整的数据结构
+- ⚠️ 不依赖于文件系统
+
+**现状**：
+- 保留用于兼容性或特殊场景
+- 不推荐在新流程中使用
+
+---
+
+## 技能流程对比
+
+### 推荐的完整流程（使用 qc-write-pg-qc）
+
+```
+质检技能 (BigPoi-verification-qc)
+    ↓
+    生成 JSON 文件到 output/results/{task_id}/
+    ├── {timestamp}_{task_id}.complete.json  ← 完整结果
+    ├── {timestamp}_{task_id}.summary.json   ← 摘要
+    └── results_index.json  ← 结果索引
+    ↓
+qc-write-pg-qc 技能
+    ↓
+    读取索引文件 results_index.json
+    ↓
+    从索引定位完整文件 .complete.json
+    ↓
+    读取 .complete.json 文件
+    ↓
+    转换数据格式
+    ↓
+    原子性更新数据库
+    └── UPDATE poi_qc_zk（质检结论、评分、风险标记、统计字段、状态）
+    ↓
+完成！
+```
+
+### 旧流程（qc-write-pg-bigpoi）
+
+```
+质检技能
+    ↓
+    直接返回数据结构
+    ↓
+qc-write-pg-bigpoi 技能
+    ↓
+    接收数据，直接更新数据库
+    ↓
+完成！
+```
+
+---
+
+## 为什么重构
+
+| **输入方式** | 直接参数 | 文件驱动 ✅ |
+| **数据追溯** | 难以追踪 | 文件持久化 ✅ |
+| **错误恢复** | 需要重新执行技能 | 可以直接从文件重试 ✅ |
+| **审计日志** | 仅数据库记录 | 完整的文件 + 数据库 ✅ |
+| **与产品统一** | 不一致 | 同步 write-pg-verified 模式 ✅ |
+| **框架集成** | 松散耦合 | 紧密集成 ✅ |
+| **目标表** | 直接参数输入 | 更新 poi_qc_zk 表 ✅ |
+
+---
+
+## 迁移指南
+
+如果您之前使用 `qc-write-pg-bigpoi`，迁移步骤：
+
+1. **质检技能输出**已经支持生成 JSON 文件到 `output/results/{task_id}/`
+2. **改用 qc-write-pg-qc** 进行写库操作
+3. **无需修改**质检技能本身
+
+**调用修改前后**：
+
+```python
+# 旧方式（不推荐）
+# SKILL_QC_WRITE = qc-write-pg-bigpoi
+# result = SKILL_QC_WRITE.execute({...数据参数...})
+
+# 新方式（推荐）
+from SKILL import execute as qc_write
+result = qc_write({
+    'task_id': '219A8C6D8C334629A7E1F164D514C381',
+    'result_dir': 'output/results'
+})
+```
+
+---
+
+## 技能位置
+
+- **新技能路径**：`skills/Quality/BigPoi-verification-qc-V1.1.0/qc-write-pg-qc/`
+- **旧技能路径**：`skills/Quality/BigPoi-verification-qc-V1.1.0/qc-write-pg-bigpoi/`（保留，不推荐使用）
+

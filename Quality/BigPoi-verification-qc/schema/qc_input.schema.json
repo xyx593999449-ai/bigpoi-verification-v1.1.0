@@ -1,0 +1,315 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "QC Input Schema",
+  "description": "BigPOI verification QC input schema v2.2.3. Accepts canonical input or legacy flat input.",
+  "oneOf": [
+    {
+      "$ref": "#/definitions/canonical_input"
+    },
+    {
+      "$ref": "qc_legacy_flat_input.schema.json"
+    }
+  ],
+  "definitions": {
+    "canonical_input": {
+      "type": "object",
+      "properties": {
+        "record": {
+          "type": "object",
+          "description": "上游最终记录",
+          "required": ["task_id", "name", "location", "category", "administrative", "existence"],
+          "properties": {
+            "task_id": {
+              "type": "string",
+              "description": "质检任务唯一标识"
+            },
+            "poi_id": {
+              "type": "string",
+              "description": "POI唯一标识，可选"
+            },
+            "name": {
+              "type": "string"
+            },
+            "location": {
+              "type": "object",
+              "required": ["longitude", "latitude", "address"],
+              "properties": {
+                "longitude": {
+                  "type": "number"
+                },
+                "latitude": {
+                  "type": "number"
+                },
+                "address": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "category": {
+              "type": "string"
+            },
+            "administrative": {
+              "type": "object",
+              "required": ["province", "city", "district"],
+              "properties": {
+                "province": {
+                  "type": "string"
+                },
+                "city": {
+                  "type": "string"
+                },
+                "district": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "existence": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": true
+        },
+        "evidence_data": {
+          "type": "array",
+          "minItems": 0,
+          "items": {
+            "type": "object",
+            "required": ["evidence_id", "source", "data", "verification"],
+            "properties": {
+              "evidence_id": {
+                "type": "string"
+              },
+              "source": {
+                "type": "object",
+                "properties": {
+                  "source_id": {
+                    "type": "string"
+                  },
+                  "source_name": {
+                    "type": "string"
+                  },
+                  "source_type": {
+                    "type": "string"
+                  },
+                  "source_url": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": true
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "location": {
+                    "type": "object",
+                    "properties": {
+                      "longitude": {
+                        "type": "number"
+                      },
+                      "latitude": {
+                        "type": "number"
+                      },
+                      "address": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": true
+                  },
+                  "category": {
+                    "type": "string"
+                  },
+                  "administrative": {
+                    "type": "object",
+                    "properties": {
+                      "province": {
+                        "type": "string"
+                      },
+                      "city": {
+                        "type": "string"
+                      },
+                      "district": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": true
+                  },
+                  "existence": {
+                    "type": "boolean"
+                  },
+                  "raw_data": {
+                    "type": "object"
+                  }
+                },
+                "additionalProperties": true
+              },
+              "verification": {
+                "type": "object",
+                "required": ["is_valid", "confidence"],
+                "properties": {
+                  "is_valid": {
+                    "type": "boolean"
+                  },
+                  "confidence": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "validation_errors": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "additionalProperties": true
+              },
+              "matching": {
+                "type": "object",
+                "properties": {
+                  "name_similarity": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "location_distance": {
+                    "type": "number"
+                  },
+                  "category_match": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "is_match": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "upstream_decision": {
+          "type": "object",
+          "required": ["overall", "dimensions", "downgrade_info"],
+          "properties": {
+            "decision_id": {
+              "type": "string"
+            },
+            "poi_id": {
+              "type": "string"
+            },
+            "overall": {
+              "type": "object",
+              "required": ["status", "confidence", "action"],
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": ["accepted", "downgraded", "manual_review", "rejected"]
+                },
+                "confidence": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "action": {
+                  "type": "string",
+                  "enum": ["adopt", "modify", "reject", "manual_review", "further_investigation"]
+                },
+                "summary": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "dimensions": {
+              "type": "object",
+              "required": ["existence", "name", "location", "administrative", "category"],
+              "properties": {
+                "existence": {
+                  "$ref": "#/definitions/upstream_dimension"
+                },
+                "name": {
+                  "$ref": "#/definitions/upstream_dimension"
+                },
+                "location": {
+                  "$ref": "#/definitions/upstream_dimension"
+                },
+                "administrative": {
+                  "$ref": "#/definitions/upstream_dimension"
+                },
+                "category": {
+                  "$ref": "#/definitions/upstream_dimension"
+                }
+              },
+              "additionalProperties": true
+            },
+            "downgrade_info": {
+              "type": "object",
+              "required": ["is_downgraded"],
+              "properties": {
+                "is_downgraded": {
+                  "type": "boolean"
+                },
+                "reason_code": {
+                  "type": "string"
+                },
+                "reason_description": {
+                  "type": "string"
+                },
+                "trigger_conditions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "recommendation": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "required": ["record", "evidence_data", "upstream_decision"],
+      "additionalProperties": false
+    },
+    "upstream_dimension": {
+      "type": "object",
+      "required": ["result", "confidence"],
+      "properties": {
+        "result": {
+          "type": "string",
+          "enum": ["pass", "fail", "uncertain"]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "details": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

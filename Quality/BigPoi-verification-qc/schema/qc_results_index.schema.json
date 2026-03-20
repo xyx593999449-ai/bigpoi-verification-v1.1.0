@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "QC Results Index Schema",
+  "description": "BigPOI verification QC results index schema",
+  "type": "object",
+  "required": ["task_id", "total_results", "last_updated", "results"],
+  "properties": {
+    "task_id": {
+      "type": "string"
+    },
+    "total_results": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "last_updated": {
+      "type": "string"
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["timestamp", "qc_status", "qc_score", "has_risk", "result_files"],
+        "properties": {
+          "timestamp": {
+            "type": "string"
+          },
+          "qc_status": {
+            "type": "string",
+            "enum": ["qualified", "risky", "unqualified"]
+          },
+          "qc_score": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "has_risk": {
+            "type": "boolean"
+          },
+          "result_files": {
+            "type": "object",
+            "required": ["complete", "summary"],
+            "properties": {
+              "complete": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "created_at": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,637 @@
+# 更新履历 (CHANGELOG)
+
+本文件用于记录 `bigpoi-verification` skill 包的所有重大变更、修复与改进。
+## [1.6.9] - 2026-03-16
+
+### 修复 (Fixed) - run_context 脚本归属与 skill 自包含
+- **run_context 下沉到各 skill 目录**：新增 `skills-bigpoi-verification/scripts/run_context.py`、`evidence-collection/scripts/run_context.py`、`verification/scripts/run_context.py`，不再依赖仓库根目录共享脚本。
+- **移除跨 skill 根目录导入**：`init_run_context.py`、`write_result_bundle.py`、`validate_result_bundle.py`、`call_internal_proxy.py`、`call_map_vendor.py`、`merge_evidence_collection_outputs.py`、`write_evidence_output.py`、`write_map_relevance_review.py`、`write_decision_output.py` 现在只从各自 `scripts/` 目录加载 `run_context.py`。
+- **删除仓库根目录旧模块**：移除根目录 `run_context.py`，避免 skill 单独安装时出现隐式仓库布局依赖。
+- **文档同步更新**：`README.md`、`skills-bigpoi-verification/SKILL.md`、`evidence-collection/SKILL.md`、`verification/SKILL.md` 已补充本地 `run_context.py` 的目录归属说明。
+
+### 影响文件
+- `skills-bigpoi-verification/scripts/run_context.py`
+- `evidence-collection/scripts/run_context.py`
+- `verification/scripts/run_context.py`
+- `skills-bigpoi-verification/scripts/init_run_context.py`
+- `skills-bigpoi-verification/scripts/write_result_bundle.py`
+- `skills-bigpoi-verification/scripts/validate_result_bundle.py`
+- `evidence-collection/scripts/call_internal_proxy.py`
+- `evidence-collection/scripts/call_map_vendor.py`
+- `evidence-collection/scripts/merge_evidence_collection_outputs.py`
+- `evidence-collection/scripts/write_evidence_output.py`
+- `evidence-collection/scripts/write_map_relevance_review.py`
+- `verification/scripts/write_decision_output.py`
+- `README.md`
+- `skills-bigpoi-verification/SKILL.md`
+- `evidence-collection/SKILL.md`
+- `verification/SKILL.md`
+
+---
+
+## [1.6.10] - 2026-03-17
+
+### Fixed - helper modules mistaken for entry scripts
+- Update `skills-bigpoi-verification/SKILL.md`, `evidence-collection/SKILL.md`, and `verification/SKILL.md` to distinguish executable entry scripts from helper modules that are for internal `import` only.
+- Add explicit direct-execution messages to the three `run_context.py` helper modules so they are not mistaken for CLI entry points.
+
+### Affected files
+- `CHANGELOG.md`
+- `skills-bigpoi-verification/SKILL.md`
+- `evidence-collection/SKILL.md`
+- `verification/SKILL.md`
+- `skills-bigpoi-verification/scripts/run_context.py`
+- `evidence-collection/scripts/run_context.py`
+- `verification/scripts/run_context.py`
+
+---
+
+## [1.6.8] - 2026-03-16
+
+### 变更 (Changed) - 地址与坐标维度拆分
+- **拆分 verification 维度**：`verification/scripts/write_decision_output.py` 现在将 `address` 与 `coordinates` 作为独立维度进行校验和汇总，`location` 仅保留为兼容聚合维度。
+- **更新父技能成包置信度**：`skills-bigpoi-verification/scripts/bundle_common.py` 现在分别使用 `dimensions.address.confidence` 与 `dimensions.coordinates.confidence` 写入地址和坐标置信度，不再共用 `location` 结果。
+- **同步更新契约与降级规则**：`decision.schema.json`、`record.schema.json`、`verification/config/thresholds.yaml`、`verification/config/downgrade.yaml` 已切换到 `address` / `coordinates` 维度口径。
+- **补充回库统计字段**：`write-pg-verified/scripts/data_converter.py` 现在额外输出 `address_result` 与 `coordinates_result`，同时保留 `location_result` 兼容字段。
+
+### 变更 (Changed) - decision seed 合同收紧
+- **要求上游显式提供维度**：`decision seed.dimensions` 必须显式提供 `address` 和 `coordinates`，不再允许仅提供 `location` 由脚本自动拆解。
+- **同步更新技能说明**：`verification/SKILL.md`、`skills-bigpoi-verification/SKILL.md` 与 `README.md` 已同步说明新的上游输入要求与兼容边界。
+
+### 影响文件
+- `verification/scripts/write_decision_output.py`
+- `verification/config/thresholds.yaml`
+- `verification/config/downgrade.yaml`
+- `skills-bigpoi-verification/scripts/bundle_common.py`
+- `skills-bigpoi-verification/scripts/validate_result_bundle.py`
+- `skills-bigpoi-verification/schema/decision.schema.json`
+- `skills-bigpoi-verification/schema/record.schema.json`
+- `write-pg-verified/scripts/data_converter.py`
+- `verification/SKILL.md`
+- `skills-bigpoi-verification/SKILL.md`
+- `README.md`
+
+---
+## [1.6.7] - 2026-03-13
+
+### 修复 (Fixed) - 回库结果稳定性
+- **统一核实摘要语言**：`verification/scripts/write_decision_output.py` 现在统一生成中文 `overall.summary`，供成果表 `verification_notes` 直接复用。
+- **收紧结构化修正要求**：当核实结论出现建议修改、修正、改为等信号时，必须在 `decision.corrections` 中输出 `name`、`address`、`coordinates`、`category`、`city`、`city_adcode` 的结构化修正。
+- **强化父技能一致性校验**：`skills-bigpoi-verification/scripts/bundle_common.py` 与 `validate_result_bundle.py` 现在校验 `corrections -> final_values -> changes` 全链路一致，避免文本建议与最终回库值不一致。
+- **稳定 changes_made 来源**：`write-pg-verified/scripts/data_converter.py` 改为优先读取 `record.verification_result.changes` 生成 `changes_made`，并继续使用 `record.verification_result.final_values` 写入成果字段。
+- **补齐 city_adcode 回写**：`write-pg-verified/scripts/db_writer.py` 现在支持从 `record.verification_result.final_values.city_adcode` 回写成果表。
+
+### 影响文件
+- `verification/scripts/write_decision_output.py`
+- `skills-bigpoi-verification/scripts/bundle_common.py`
+- `skills-bigpoi-verification/scripts/validate_result_bundle.py`
+- `write-pg-verified/scripts/data_converter.py`
+- `write-pg-verified/scripts/db_writer.py`
+- `skills-bigpoi-verification/schema/decision.schema.json`
+- `skills-bigpoi-verification/schema/record.schema.json`
+- `verification/SKILL.md`
+- `skills-bigpoi-verification/SKILL.md`
+- `write-pg-verified/SKILL.md`
+- `README.md`
+
+---
+
+## [1.6.6] - 2026-03-13
+
+### 变更 (Changed) - 全链路运行隔离与中间文件防误读
+- **新增统一 run 上下文模块**：新增 `run_context.py`，统一生成 `run_id`、`output/runs/{run_id}/process|staging` 目录，并为中间 JSON 绑定 `run_id / poi_id / created_at`。
+- **父技能新增运行初始化入口**：新增 `skills-bigpoi-verification/scripts/init_run_context.py`，用于在父技能启动时初始化本次运行目录，避免多个 POI 共用固定中间文件名。
+- **证据收集链路传递 run 上下文**：`call_internal_proxy.py`、`call_map_vendor.py`、`write_map_relevance_review.py`、`merge_evidence_collection_outputs.py`、`write_evidence_output.py` 现在会在 raw/review/merge/evidence 各阶段传递并校验 `run_id`。
+- **verification 增加身份校验**：`write_decision_output.py` 现在强制校验 `decision seed.context`、`evidence.metadata.run_id` 与当前输入 POI 一致，避免 seed 写失败后误读旧文件。
+- **父技能成包与终检增加 run 一致性校验**：`write_result_bundle.py` 与 `validate_result_bundle.py` 现在要求 `decision.run_id`、`evidence.metadata.run_id`、`record.run_id`、`index.run_id` 保持一致。
+- **文档同步更新**：`README.md`、`evidence-collection/SKILL.md`、`verification/SKILL.md`、`skills-bigpoi-verification/SKILL.md` 已补充 `run_id`、`output/runs/{run_id}` 与中间文件写入约束。
+
+### 影响范围
+
+- `run_context.py`
+- `evidence-collection/scripts/call_internal_proxy.py`
+- `evidence-collection/scripts/call_map_vendor.py`
+- `evidence-collection/scripts/write_map_relevance_review.py`
+- `evidence-collection/scripts/merge_evidence_collection_outputs.py`
+- `evidence-collection/scripts/write_evidence_output.py`
+- `verification/scripts/write_decision_output.py`
+- `skills-bigpoi-verification/scripts/init_run_context.py`
+- `skills-bigpoi-verification/scripts/write_result_bundle.py`
+- `skills-bigpoi-verification/scripts/validate_result_bundle.py`
+- `README.md`
+- `evidence-collection/SKILL.md`
+- `verification/SKILL.md`
+- `skills-bigpoi-verification/SKILL.md`
+
+---
+
+## [1.6.5] - 2026-03-10
+
+### 变更 (Changed) - 父技能结果目录自动探测与跨系统路径约束
+
+- **新增工作区根目录探测模块**：新增 `skills-bigpoi-verification/scripts/runtime_paths.py`，支持从显式 `WorkspaceRoot`、输入文件路径和当前工作目录出发，向上逐级查找 `.claude`、`.openclaw`、`.git` 来推断业务工作区根目录。
+- **父技能结果写入改为基于工作区探测**：`write_result_bundle.py` 不再默认按技能安装目录反推输出根目录，而是统一写入探测到的 `workspace_root/output/results/{task_id}`。
+- **最终校验增加工作区约束**：`validate_result_bundle.py` 现在会校验 `task_dir` 是否位于正确的 `workspace_root/output/results/{task_id}` 下，避免 Linux 或多应用安装场景下结果写入错误目录仍然通过校验。
+- **文档同步更新**：补充父技能 `WorkspaceRoot` 的显式传参与自动探测规则，并说明当前仍保留 `index.files.*` 绝对路径合同。
+
+### 影响范围
+
+- `skills-bigpoi-verification/scripts/runtime_paths.py`
+- `skills-bigpoi-verification/scripts/write_result_bundle.py`
+- `skills-bigpoi-verification/scripts/validate_result_bundle.py`
+- `skills-bigpoi-verification/SKILL.md`
+- `README.md`
+
+---
+
+
+## [1.6.4] - 2026-03-10
+
+### 修复 (Fixed) - write-pg-verified 兼容隐藏目录中的 index 检索
+
+- **索引遍历改为 Path.rglob**：将 `write-pg-verified/SKILL.py` 中基于 `glob.glob` 的递归查找改为 `Path.rglob(...)`，确保 Linux 下输入目录中的 `.claude` 等隐藏目录也能正常检索到候选 `index*.json` 文件。
+- **技能文档补充说明**：更新 `write-pg-verified/SKILL.md`，明确隐藏目录场景同样受支持，避免在重试或中间产物落到隐藏目录时出现漏检。
+
+### 影响范围
+
+- `write-pg-verified/SKILL.py`
+- `write-pg-verified/SKILL.md`
+
+---
+## [1.6.3] - 2026-03-10
+
+### 变更 (Changed) - write-pg-verified 支持可配置回库表名
+
+- **回库表名参数化**：将原始表和核实成果表从代码中的硬编码改为可传参数，新增 `init` 和 `verified` 两个入参；默认仍分别使用 `poi_init` 和 `poi_verified`，因此现有调用无需修改。
+- **SQL 表名安全拼接**：在 `write-pg-verified/scripts/db_writer.py` 中对传入表名增加标识符校验，并使用安全的 SQL Identifier 方式构造查询，避免把可配表名变成字符串拼接风险。
+- **技能文档同步更新**：更新 `write-pg-verified/SKILL.md`，补充表名覆盖方式、默认值和 schema 形式示例。
+
+### 影响范围
+
+- `write-pg-verified/SKILL.py`
+- `write-pg-verified/scripts/db_writer.py`
+- `write-pg-verified/SKILL.md`
+
+---
+## [1.6.2] - 2026-03-10
+
+### 修复 (Fixed) - write-pg-verified 重试场景下的 index 选择错误
+
+- **多份 index 文件按最新时间戳择优**：修复 `write-pg-verified/SKILL.py` 在 `task_id + search_directory` 模式下命中第一个 index 即返回的问题。现在会收集所有 `task_id` 匹配的候选 index，并按文件最后修改时间降序选择最新结果，避免调度重试后继续误用旧的错误产物。
+- **补充重试兼容说明**：更新 `write-pg-verified/SKILL.md`，明确说明同一 `task_id` 存在多个 index 时的选择规则、推荐调用方式，以及日志中会记录候选数量与最终命中的最新文件。
+
+### 影响范围
+
+- `write-pg-verified/SKILL.py`
+- `write-pg-verified/SKILL.md`
+
+---
+## [1.6.1] - 2026-03-10
+
+### 新增 (Added) - 图商相关性初筛稳定化
+
+- **新增图商相关性初筛写入脚本**：补充 `evidence-collection/scripts/write_map_relevance_review.py`，用于将模型给出的图商候选保留/剔除判断写成稳定的 reviewed JSON，避免将 query 误召回结果直接归并进正式 evidence
+
+### 变更 (Changed) - 技能文档与成果文件命名约束
+
+- **技能文件名统一为 `SKILL.md`**：将正式技能文档统一收敛为 Claude Code 规范要求的 `SKILL.md` 命名
+  - `evidence-collection/SKILL.md`
+  - `skills-bigpoi-verification/SKILL.md`
+  - `verification/SKILL.md`
+- **正式 evidence 命名口径收紧**：明确只有完成相关性初筛、归并和规范化之后的最终证据文件，才能命名为 `evidence_<timestamp>.json`
+- **过程文件命名与索引约束补充**：原始检索结果、图商原始结果、review 结果与归并中间结果统一视为过程文件，必须使用过程命名，不得进入最终 `index`
+- **父技能交付边界同步更新**：父技能文档同步声明过程文件只能存在于 `output/` 下的过程目录中，不属于正式交付目录的一部分
+- **README 同步更新**：补充 Claude Code 技能目录规范、正式文件与过程文件的命名区别，以及部署时的交付约束
+- **补回 evidence-collection 初筛流程说明**：修正文档恢复时遗漏的步骤，明确图商原始结果与补采结果都必须先经过 `write_map_relevance_review.py` 产出 reviewed JSON，之后才能进入归并
+
+### 影响范围
+
+- **主要修改文件**：
+  - `README.md`
+  - `evidence-collection/SKILL.md`
+  - `skills-bigpoi-verification/SKILL.md`
+  - `verification/SKILL.md`
+  - `evidence-collection/scripts/write_map_relevance_review.py`
+
+---
+## [1.6.0] - 2026-03-09
+
+### 新增 (Added) - 结果稳定化与脚本化产物
+
+- **父子技能正式结果写入脚本补齐**：为 `evidence-collection`、`verification`、`bigpoi-verification` 三层补齐正式结果写入与校验脚本，确保正式产物只能通过脚本落盘生成
+  - `evidence-collection/scripts/write_evidence_output.py`：统一生成 `evidence_<timestamp>.json`
+  - `verification/scripts/write_decision_output.py`：统一生成 `decision_<timestamp>.json`
+  - `skills-bigpoi-verification/scripts/write_result_bundle.py`：统一生成 `decision/evidence/record/index` 结果包
+  - `skills-bigpoi-verification/scripts/validate_result_bundle.py`：对目录结构、文件命名、文件内容执行最终规格校验
+
+- **证据收集并行链路脚本化**：新增并固定证据收集阶段的正式 Python 入口，覆盖内部代理、图商补采、归并规范化、落盘四个阶段
+  - `evidence-collection/scripts/build_web_source_plan.py`
+  - `evidence-collection/scripts/call_internal_proxy.py`
+  - `evidence-collection/scripts/call_map_vendor.py`
+  - `evidence-collection/scripts/merge_evidence_collection_outputs.py`
+  - `evidence-collection/scripts/evidence_collection_common.py`
+
+- **父技能成包公共逻辑沉淀**：新增 `skills-bigpoi-verification/scripts/bundle_common.py`，统一输入规范化、记录生成、哈希命名与 bundle 校验辅助逻辑
+
+### 变更 (Changed) - 证据输入契约与流程约束
+
+- **verification 输入收敛为正式文件**：`verification` 子技能不再接收不确定的内联 evidence，对外输入固定为 `input 文件 + evidence 文件路径`
+- **证据收集流程改为固定并行编排**：内部图商代理固定同时请求 `amap / bmap / qmap`，并与 `websearch / webfetch` 分支并行执行；仅当内部代理存在 `missing_vendors` 时，才允许单独调用对应图商 API 补采
+- **父技能末尾增加硬性规格校验**：父技能在最终产物落盘后必须执行目录、文件名、文件内容三层校验；若失败，必须根据 `failed_stage` 打回 `evidence_collection`、`verification` 或 `parent_integration`
+- **技能文档统一改为 Python 调用方式**：
+  - `evidence-collection/SKILL.md`
+  - `verification/SKILL.md`
+  - `skills-bigpoi-verification/SKILL.md`
+  文档中的正式调用示例已统一从 PowerShell 切换为 `python ...`
+- **编码兼容性增强**：公共读文件逻辑兼容 `UTF-8 BOM`，避免已有输入、mock 或中间 JSON 在 Python 下因 BOM 直接解析失败
+
+### 精简 (Removed)
+
+- **下线旧 PowerShell 正式入口**：删除以下旧 `.ps1` 正式脚本，避免继续误走历史链路
+  - `evidence-collection/scripts/evidence_collection_common.ps1`
+  - `evidence-collection/scripts/build_web_source_plan.ps1`
+  - `evidence-collection/scripts/call_internal_proxy.ps1`
+  - `evidence-collection/scripts/call_map_vendor.ps1`
+  - `evidence-collection/scripts/merge_evidence_collection_outputs.ps1`
+  - `evidence-collection/scripts/write_evidence_output.ps1`
+  - `verification/scripts/write_decision_output.ps1`
+  - `skills-bigpoi-verification/scripts/write_result_bundle.ps1`
+  - `skills-bigpoi-verification/scripts/validate_result_bundle.ps1`
+
+### 验证 (Verified)
+
+- **Python 正式链路本地跑通**：已完成 `collector output -> evidence file -> decision file -> final bundle -> validator` 的代表性链路验证
+- **最终校验通过**：父技能终检返回 `status = passed`，`failed_stage = complete`
+
+### 影响范围
+
+- **主要变更文件**：
+  - `evidence-collection/scripts/*.py`
+  - `verification/scripts/write_decision_output.py`
+  - `skills-bigpoi-verification/scripts/bundle_common.py`
+  - `skills-bigpoi-verification/scripts/write_result_bundle.py`
+  - `skills-bigpoi-verification/scripts/validate_result_bundle.py`
+  - `evidence-collection/SKILL.md`
+  - `verification/SKILL.md`
+  - `skills-bigpoi-verification/SKILL.md`
+
+---
+## [1.5.0] - 2026-03-05
+
+### 修复 (Fixed) - Schema 定义和文档歧义问题
+
+- **职责划分明确**：修复文档歧义导致的 record 格式错误问题
+  - `verification/SKILL.md`：明确子技能只输出决策结构（decision.schema.json），不生成入库记录
+  - `skills-bigpoi-verification/SKILL.md`：明确主技能负责整合生成入库记录（record.schema.json）
+  - 消除文档中的职责重叠，避免 LLM 输出格式混乱
+
+- **字段命名统一**：统一 input.schema 和 record.schema 中的字段命名
+  - `input.schema.json`：将 `coordinates` 对象从"已弃用"改为"推荐格式"
+  - 字段说明中明确标注与 `record.schema.final_values` 保持一致
+  - 更新示例使用推荐的 `coordinates` 对象格式
+
+- **增加 city_adcode 字段**：在 record.schema.json 的 final_values 中新增字段
+  ```json
+  "city_adcode": {
+    "type": "string",
+    "description": "核实后的城市行政区划代码",
+    "pattern": "^\\d{6}$"
+  }
+  ```
+  - 解决回库时需要从 input_data 回退获取 city_adcode 的问题
+  - 更新示例数据，包含 city_adcode 字段
+
+### 变更 (Changed)
+
+- **版本更新**：Schema 版本号升级至 v1.2.0（input.schema.json）和 v1.2.0（record.schema.json）
+
+### 影响范围
+
+- **主要修改文件**：
+  - `verification/SKILL.md` - 明确输出职责
+  - `skills-bigpoi-verification/SKILL.md` - 明确主技能职责
+  - `schema/input.schema.json` - 统一字段命名，更新版本为 v1.2.0
+  - `schema/record.schema.json` - 增加 city_adcode 字段，更新版本为 v1.2.0
+
+---
+
+## [1.4.0] - 2026-03-04
+
+### 新增 (Added) - write-pg-verified 技能重构
+
+- **原始表状态同步修复**：修复了当 task_id 已存在于成果表时，原始表状态未更新的问题
+  - 修改逻辑：即使成果表已存在记录，也会执行原始表状态更新为'已核实'
+  - 确保原始表状态始终能正确同步，避免出现永久'核实中'状态
+
+### 变更 (Changed) - write-pg-verified 技能简化
+
+- **移除直接数据模式**：仅支持索引文件模式，简化代码结构
+  - 删除 `direct_data_to_db_format()` 方法
+  - 删除 `merge_with_poi_init_data()` 方法
+  - 删除 `_get_poi_init_data()` 方法
+  - 删除 `_write_from_direct_data()` 方法
+  - 更新输入验证逻辑，只接受 `index_file` 参数
+
+- **版本更新**：版本号从 1.3.0 升级至 1.4.0
+
+- **文档更新**：
+  - 移除直接数据模式相关文档
+  - 更新输入格式说明
+  - 添加状态同步特性说明
+  - 移除本地更新日志（统一记录到本 CHANGELOG.md）
+
+### 精简 (Removed)
+
+- **测试代码清理**：移除直接数据模式的测试代码
+- **缓存文件清理**：删除 `__pycache__` 目录
+
+### 影响范围
+
+- **主要修改文件**：
+  - `write-pg-verified/SKILL.md` - 更新文档至 v1.4.0
+  - `write-pg-verified/SKILL.py` - 移除直接数据模式支持
+  - `write-pg-verified/scripts/db_writer.py` - 修复状态同步逻辑，移除直接数据模式
+
+---
+
+## [1.2.0] - 2026-02-27
+
+### 架构级调整（Breaking Change）
+
+- **数据库表拆分**：将原单一表拆分为原始表（`poi_init`）和成果表（`poi_verified`），实现读写分离
+- **任务追踪机制**：引入 `task_id` 作为任务唯一主键，支持全流程追溯
+
+### 新增 (Added)
+
+- **数据库表结构**：
+  - `database/poi_init.ddl.sql` - 原始表（输入表）DDL，使用 `task_id` 作为主键
+  - `database/poi_verified.ddl.sql` - 成果表DDL，存储核实后的POI数据
+
+- **新增字段**：
+  - `task_id` - 任务唯一ID（主键），用于全流程追踪
+  - `poi_status` - POI实际状态字段（0-尚未开业；1-正常；2-软删；3-暂停营业；4-疑似下线；5-已关闭），对应存在性核实结果
+
+- **成果表字段**：
+  - 核实后的POI基础数据（name, coordinates, poi_type, address等）
+  - 核实结果数据（verify_result, overall_confidence, poi_status）
+  - 核实详情JSON字段（verify_info, evidence_record, changes_made）
+  - 关联追溯字段（original_task_id, original_id）
+  - 审计字段（verify_time, verified_by, verification_version）
+
+### 变更 (Changed)
+
+- **read-pg-bigpoi 技能** (v1.1.0 → v1.2.0)：
+  - 表名从 `public.poi` 改为 `public.poi_init`
+  - 使用原始表自带的 `task_id`，不再生成新的task_id
+  - 返回数据包含 `task_id` 字段用于全流程传递
+  - 按 `verify_priority` 优先级获取待核实数据
+
+- **update-pg-bigpoi 技能** (v1.1.0 → v1.2.0)：
+  - 从更新原始表改为插入成果表 `public.poi_verified`
+  - 使用原始的 `task_id` 作为成果表的主键，保持一致性
+  - **原子性事务保证**：写入成果表与更新原始表状态在同一事务中执行，确保数据一致性
+  - **原始表状态同步**：写入成果表的同时将原始表状态从'核实中'更新为'已核实'，避免任务阻塞
+  - 支持写入核实后的POI数据（name, coordinates等）
+  - 支持写入JSON字段（verify_info, evidence_record, changes_made）
+  - 支持写入 `poi_status` 字段（存在性核实结果）
+
+### 修复 (Fixed)
+
+- **原始表状态同步问题**：确认并验证了 `update-pg-bigpoi` 技能的事务逻辑正确性
+  - 插入成果表和更新原始表状态在同一事务中原子性执行
+  - 任何步骤失败都会触发事务回滚，不会出现数据不一致
+  - 确保原始表不会出现永久'核实中'状态导致后续任务阻塞
+
+### 新增 (Added) - 类型代码映射
+
+- **POI类型代码映射配置**：
+  - `config/poi_type_mapping.yaml` - 公司内部类型代码到大POI白名单类型的映射配置
+  - 支持精确匹配和前缀匹配（如 "09" 匹配所有医疗机构类型）
+  - 覆盖10类大POI：医疗机构、政府机关、公安机关、法院、检察院、景区、博物馆、高等院校、机场、火车站
+
+- **类型代码示例**：
+  - 医疗机构：090100（综合医院）、090101（三甲医院）、090200（专科医院）等
+  - 政府机关：130100（政府机关相关）、130101（国家级）等
+  - 公安机关：130501（公安警察）
+  - 检察院：130502
+  - 法院：130503
+  - 景区：11xxxx（风景名胜相关）
+  - 博物馆：140100
+  - 高等院校：141201
+  - 机场：150104（飞机场）等
+  - 火车站：150200
+
+### 变更 (Changed) - 技能文档
+
+- **类型识别逻辑**：更新主技能文档说明输入 `poi_type` 为公司内部类型代码，需通过映射配置转换为大POI白名单类型
+
+### 修复 (Fixed) - 编码问题
+
+- **UTF-8 编码问题**：修复数据库读写技能的中文乱码问题
+  - `read-pg-bigpoi/scripts/poi_scanner.py`：数据库连接添加 `client_encoding='utf8'` 和 `set_client_encoding('UTF8')`
+  - `update-pg-bigpoi/scripts/write_result.py`：数据库连接添加 `client_encoding='utf8'` 和 `set_client_encoding('UTF8')`
+  - `read-pg-bigpoi/SKILL.py`：添加标准输出 UTF-8 编码设置
+  - `update-pg-bigpoi/SKILL.py`：添加标准输出 UTF-8 编码设置
+  - 确保中文字符在 JSON 输出中正确显示
+
+- **类型代码输出问题**：强调输出必须使用公司内部类型代码
+  - `read-pg-bigpoi/SKILL.md`：添加严禁转换 poi_type 的说明
+  - `update-pg-bigpoi/SKILL.md`：强调输入必须使用公司内部类型代码
+  - `verification/SKILL.md`：添加类型代码输出要求，明确映射仅用于内部校验
+  - `schema/record.schema.json`：修改字段描述，明确必须使用类型代码；修正示例数据
+    - `input_data.poi_type`：添加类型代码说明
+    - `final_values.category`：修改为"保持原始类型代码"
+    - 示例数据从 `"poi_type": "hospital"` 改为 `"poi_type": "090101"`
+    - 示例数据从 `"category": "综合医院"` 改为 `"category": "090101"`
+  - 确保 `poi_type` 输出为类型代码（如 "090101"）而非英文类型（如 "hospital"）
+
+### 新增 (Added) - verification 类型映射配置
+
+- **类型映射引用配置**：
+  - `verification/config/type_mapping.yaml` - verification 技能的类型映射引用配置
+  - 指向父技能 `skills-bigpoi-verification/config/poi_type_mapping.yaml`
+  - 用于分类正确性维度的核实：将输入类型代码映射到白名单类型进行校验
+
+- **配置使用说明**：
+  - 输入: `poi_type = "090101"`（类型代码）
+  - 映射: 通过配置映射到 `hospital`（白名单类型）
+  - 核实: 检查证据中是否包含相关分类
+  - 输出: `category = "090101"`（保持原始类型代码）
+
+### 修复 (Fixed) - evidence_record 格式问题
+
+- **证据记录格式不一致问题**：明确 `evidence_record` 字段必须严格按照 `evidence.schema.json` 定义的格式
+  - `update-pg-bigpoi/SKILL.md`：更新 `evidence_record` 格式为证据数组格式
+  - `evidence-collection/SKILL.md`：更新输出格式要求，严格符合 schema 定义
+
+- **正确格式（证据数组，每项符合 evidence.schema.json）**：
+  ```json
+  [
+    {
+      "evidence_id": "EVD_20240228_001",
+      "poi_id": "HOSPITAL_BJ_001",
+      "source": {
+        "source_id": "TENCENT_001",
+        "source_name": "腾讯地图",
+        "source_type": "map_vendor",
+        "weight": 0.8
+      },
+      "collected_at": "2026-02-28T16:44:52.662150Z",
+      "data": {
+        "name": "荆门市东宝区人民政府",
+        "phone": "0724-2365887",
+        "address": "湖北省荆门市东宝区金虾路9号",
+        "coordinates": {"latitude": 31.051968, "longitude": 112.201115},
+        "category": "政府机关",
+        "status": "active"
+      },
+      "verification": {"is_valid": true, "confidence": 0.8},
+      "matching": {"name_similarity": 0.95, "is_match": true},
+      "metadata": {"collection_method": "api"}
+    }
+  ]
+  ```
+
+- **禁止的格式**：
+  - ❌ `{"sources": [...], "total_count": 2}` （对象格式，不符合 schema）
+  - ❌ `{"details": [...], "sources": ["来源1"]}` （简化格式）
+  - ❌ `{"evidence_record": "..."}` （单条证据，应该是数组）
+
+- **格式要求**：
+  - `evidence_record` 必须是**证据数组**格式
+  - 每个证据必须包含 `evidence_id`, `poi_id`, `source`, `collected_at`, `data`
+  - `source` 必须包含 `source_id`, `source_name`, `source_type`
+  - `source_type` 必须是枚举值：`official`, `map_vendor`, `internet`, `user_contributed`, `other`
+  - `data` 必须包含至少 `name` 字段
+  - 可选字段：`verification`, `matching`, `metadata`
+
+### 影响范围
+
+- **主要修改文件**：
+  - `database/poi_init.ddl.sql` (新增)
+  - `database/poi_verified.ddl.sql` (新增)
+  - `read-pg-bigpoi/SKILL.md`
+  - `read-pg-bigpoi/scripts/poi_scanner.py`
+  - `update-pg-bigpoi/SKILL.md`
+  - `update-pg-bigpoi/SKILL.py`
+  - `update-pg-bigpoi/scripts/write_result.py`
+
+- **数据流变更**：
+  ```
+  原始表 (poi_init)                    成果表 (poi_verified)
+  ┌─────────────────────┐              ┌──────────────────────┐
+  │ task_id (PK)        │ ──────────→  │ task_id (PK)         │
+  │ verify_status       │              │ verify_result        │
+  │ ...                 │              │ poi_status           │
+  └─────────────────────┘              │ verify_info (jsonb)   │
+                                     └──────────────────────┘
+  ```
+
+- **兼容性说明**：此版本为Breaking Change，需要同步创建新的数据库表结构
+
+---
+
+## [1.1.1] - 2026-02-12
+
+### 优化 (Optimized)
+
+- **配置文件拆分**：为减少 Token 消耗，将单一的 `config/sources.yaml` 按类型拆分为多个独立配置文件：
+  - `config/common.yaml` - 全局配置、API Key 凭据池、图商配置（所有类型共用）
+  - `config/{poi_type}.yaml` - 各 POI 类型的专有数据源配置（按需加载）
+
+- **Token 节省效果**：查询特定类型 POI 时，从原来加载 ~8000 tokens 降至 ~1500 tokens，节省约 85%
+
+- **删除无效爬虫源**：移除所有 `http://10.82.122.209:9081` 爬虫源配置（11处）
+
+### 变更 (Changed)
+
+- **skill.md 更新**：更新配置加载说明，明确先加载 `common.yaml` 再按需加载类型配置
+
+### 影响范围
+- **主要修改文件**：
+  - `evidence-collection/config/common.yaml` (新增)
+  - `evidence-collection/config/hospital.yaml` (新增)
+  - `evidence-collection/config/government.yaml` (新增)
+  - `evidence-collection/config/police.yaml` (新增)
+  - `evidence-collection/config/court.yaml` (新增)
+  - `evidence-collection/config/procuratorate.yaml` (新增)
+  - `evidence-collection/config/scenic.yaml` (新增)
+  - `evidence-collection/config/museum.yaml` (新增)
+  - `evidence-collection/config/university.yaml` (新增)
+  - `evidence-collection/config/airport.yaml` (新增)
+  - `evidence-collection/config/railway_station.yaml` (新增)
+  - `evidence-collection/config/sources.yaml` (删除)
+  - `evidence-collection/SKILL.md`
+
+## [1.1.0] - 2026-02-10
+
+### 架构级调整（Breaking Change）
+
+- **变更背景**：
+    针对模型未按流程规范执行，尝试按照父子技能的方式将技能拆分为细粒度技能，由父技能统一编排核实流程
+
+- **目录重组**：从单一的 `bigpoi-verification` 目录拆分为多个结构化的子技能目录：
+  - `skills-bigpoi-verification/`：主核实技能总入口（包含完整的schema、config、rules）
+  - `verfication/`：核实判定子技能
+  - `evidence-collection/`：情报收集子技能
+
+### 新增 (Added)
+
+- **文档规范化**：
+  - 重新组织和规范化 `verfication/skill.md`，统一了技能文档的层级结构和术语定义
+  - 补充了详细的核实维度定义、决策原则、输入输出规范
+  - 明确了规则隔离要求（按维度隔离）
+
+- **POI 类型配置**：
+  - 新增 `config/bigpoi_type.yaml` - 规范化的大POI类型白名单配置
+  - 支持10类大POI类型：医疗机构、政府机关、公安机关、法院、检察院、景区、博物馆、高等院校、机场、火车站
+
+
+
+
+
+## [1.0.2] - 2026-02-04
+
+### 修复 (Fixed)
+- **情报收集实现修复**: 修复 `scripts/collect_evidence.py` 中的关键问题 - 将所有模拟数据收集替换为真实多源 API 集成，确保实际从外部数据源获取 POI 信息而非返回硬编码数据。
+  - 替换了 `_collect_from_map_api()` 的模拟实现，改为真实调用高德/百度/腾讯地图 API。
+  - 替换了 `_collect_from_web_crawler()` 的模拟实现，改为真实调用网页爬虫服务（地址：`http://10.82.122.209:9081`）。
+  - 替换了 `_collect_from_official_source()` 的硬编码返回值，改为调用实际的官方渠道 API（卫健、政府、警务、司法系统）。
+  - 替换了 `_collect_from_internet()` 的空壳实现，改为真实获取网络信息源（百度百科、维基百科、好大夫等）。
+
+### 变更 (Changed)
+- **执行性能特征**: 数据收集流程从即时返回（<100ms）变更为真实网络异步请求（5-30s），反映真实的多源并行数据获取延迟。
+- **证据数据质量**: 收集的证据从静态模拟数据改为真实 API 响应数据，包括实际的 POI 名称、地址、坐标、电话、分类等信息。
+- **错误处理策略**: 新增了针对网络超时、API 限流、源不可用等情况的容错机制和降级处理。
+
+### 新增 (Added)
+- **高德地图 API 集成** (`_call_amap()` 方法): 直接调用高德地图 POI 搜索 API，解析并返回实际的 POI 数据。
+- **百度地图 API 集成** (`_call_baidu_map()` 方法): 集成百度地图地点搜索 API，获取真实的位置数据。
+- **腾讯地图 API 集成** (`_call_qq_map()` 方法): 集成腾讯地图搜索服务 API。
+- **爬虫服务集成** (`_call_web_crawler()` 方法): 调用专业网页爬虫服务进行目标网页内容提取和信息采集。
+- **官方渠道 API 集成** (`_call_official_api()` 方法): 统一处理卫健系统、政府数据、警务系统、司法系统的官方数据源接口。
+- **网络信息源集成** (`_call_internet_source()` 方法): 统一接口支持百度百科、维基百科、好大夫等多个网络信息平台的数据获取。
+- **平台特定方法**: 新增 `_call_baidu_baike()`, `_call_wikipedia()`, `_call_haodf()` 等专有方法用于各信息源的特定 API 调用逻辑。
+
+### 影响范围
+- **主要修改文件**: `scripts/collect_evidence.py`
+- **接口兼容性**: 保持完全向后兼容，API 入参和出参格式未变更
+- **性能影响**: 由于引入真实网络请求，单次验证执行时间增加 5-30 秒（来自网络延迟），建议在实际部署时进行超时和并发控制配置
+
+## [1.0.1] - 2026-02-03
+
+### 修复 (Fixed)
+- **配置文件命名**: 将 `config/skill.ymal` 重命名为正确的 `config/skill.yaml`，修复由于拼写错误导致的 Skill 无法识别问题。
+
+### 变更 (Changed)
+- **数据源配置增强**: 在 `config/sources.yaml` 中引入了 `credentials` 全局凭据资源池结构。
+- **API Key 资源池化**: 支持为百度、高德、腾讯地图配置多个 API Key 列表。
+- **Referer 绑定支持**: 升级凭据存储结构，支持为每个 API Key 单独配置可选的 `referer` 字段。
+- **字段名适配**: 适配厂商命名习惯，高德/百度使用 `ak` 字段，腾讯保持使用 `key` 字段。
+- **引用机制优化**: 数据源通过 `api_key_ref` 标识符关联至对应的凭据池。
+
+### 评审 (Review)
+- 完成了对整个 Skill 包的深度技术评审，确认了其纯规则引擎（零 Token 消耗）的特性，并提出了引入 LLM 混合模式处理复杂语义别名的优化建议。
+
+
+

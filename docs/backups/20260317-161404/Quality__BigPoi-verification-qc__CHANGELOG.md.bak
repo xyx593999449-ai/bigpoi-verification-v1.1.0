@@ -1,0 +1,150 @@
+# CHANGELOG
+
+## [2.2.3] - 2026-03-17
+
+### 新增
+- 在 `scripts/normalize_legacy_input.py` 中加入统一证据预处理逻辑；无论输入是 canonical 还是 legacy flat，都会在质检前先过滤无效证据
+
+### 修复
+- 过滤 `verification.is_valid = false` 的证据，避免其进入完整性检查和维度判定
+- 增加同主实体去噪规则，过滤明显属于附属点位或关联设施的证据，例如 `东门`、`西门`、`停车场`、`政务中心`、`办事大厅`
+- 允许预处理后 `evidence_data` 为空，由完整性检查统一判定失败，而不是被输入 schema 提前拦截
+
+### 文档
+- 更新 `SKILL.md` 执行流程，明确“归一化 -> 无效证据过滤 -> 完整性检查 -> 维度判定”的固定顺序
+- 更新 `schema/qc_input.schema.json` 描述，使其与预处理后可能出现的空 `evidence_data` 保持一致
+
+## [2.2.2] - 2026-03-17
+
+### 修复
+- 重新检查并收紧 6 个业务维度的 DSL 判定条件，修复“单条支持证据一律不能通过”的过严规则
+- 为 `existence`、`name`、`location`、`address`、`administrative`、`category` 增加“单条高置信度证据可直接通过”的 pass 分支
+- 收紧 `name/category` 的中等匹配风险分支，以及 `address/administrative` 的弱支持风险分支，避免本应 pass 的强支持结果被提前判为 risk
+
+### 文档
+- 更新 `SKILL.md` 中 6 个业务维度的判定语义，明确“高置信度单证据可 pass，低置信度单证据才 risk”
+
+## [2.2.1] - 2026-03-17
+
+### 修复
+- 为 `scripts/result_persister.py` 增加技能安装目录保护；当输出目录解析到 `.claude/skills/<skill>/output/results` 或 `.openclaw/skills/<skill>/output/results` 时，自动改写到工作区根目录的 `output/results`
+
+### 文档
+- 更新 `SKILL.md` 的持久化约束，明确禁止将结果保存到技能安装目录下的 `output/results`
+
+## [2.2.0] - 2026-03-17
+
+### 新增
+- 新增 `schema/qc_legacy_flat_input.schema.json`，用于描述旧版平铺输入
+- 新增 `scripts/normalize_legacy_input.py`，用于将 legacy 平铺输入稳定归一化为 canonical 输入
+
+### 改进
+- 将 `schema/qc_input.schema.json` 扩展为同时接受 canonical 输入和 legacy 平铺输入
+- 重写 `SKILL.md` 执行流程，明确 legacy 输入必须先归一化，再执行完整性检查、结果校验和本地持久化
+
+### 约束
+- 明确禁止在执行过程中创建 `run_qc.py`、`temp_qc_processor.py` 等临时 Python 脚本
+- 明确禁止手写持久化路径，要求结果路径只能来自 `result_persister.py` 的真实返回值
+
+## [2.1.5] - 2026-03-16
+
+### 修复
+- 为 `scripts/result_persister.py` 增加 `output_dir` 归一化逻辑；当调用方传入的输出目录已经是 `{task_id}` 目录时，直接复用该目录，避免生成双层 `{task_id}/{task_id}` 路径
+
+### 文档
+- 更新 `SKILL.md` 中的持久化约束，明确 `output_dir` 已指向任务目录时的处理规则
+
+## [2.1.4] - 2026-03-16
+
+### 修复
+- 调整 `scripts/result_persister.py` 的默认落盘根目录识别逻辑，优先对齐当前技能工作区根目录，避免与 `qc-write-pg-qc` 的默认查找根目录不一致
+- 调整持久化返回语义：任一必需文件写入失败时，`status` 可为 `partial`，但 `success` 必须为 `false`，禁止调用方将部分落盘结果继续视为可回库状态
+
+### 文档
+- 更新 `SKILL.md` 中的本地持久化要求，明确默认根目录优先级和 `partial` 返回的失败语义
+
+## [2.1.3] - 2026-03-16
+
+### 文档
+- 补全 `SKILL.md` 第 7 节，完整覆盖 `existence`、`name`、`location`、`address`、`administrative`、`category`、`downgrade_consistency` 7 个维度
+- 将维度定义统一为“语义边界写在 `SKILL.md`，具体阈值与证据规则写在 `decision_tables.json` DSL”
+
+## [2.1.2] - 2026-03-16
+
+### 修复
+- 将结果持久化要求恢复到 `SKILL.md` 的权威说明中，避免主技能文档与 `result_persister.py` 实现脱节
+- 将 `result_persister.py` 补回权威加载链路
+- 修正 `CLAUDE.md` 中指向旧版 `SKILL.md` 章节号的失效引用
+
+## [2.1.1] - 2026-03-16
+
+### 清理
+- 删除旧版分散规则文件 `rules/**/R*.yaml`，避免与 `rules/decision_tables.json` 并存造成误导
+- 删除废弃配置 `config/score_weights.yaml`、`config/risk_dimension_map.yaml` 和未消费的 `config/downgrade_policy.yaml`
+
+### 记录
+- 保留既有版本历史，仅在 `CHANGELOG.md` 中追加本次清理记录
+- 当前目录的权威规则链路继续保持为 `SKILL.md -> decision_tables.json -> decision_tables.schema.json -> scoring_policy.json -> dsl_validator.py/result_validator.py`
+
+## [2.1.0] - 2026-03-16
+
+### 新增
+- 为 `rules/decision_tables.json` 增加 DSL 结构，补充 `metrics`、`outcomes`、`evidence_policy`
+- 新增 `schema/decision_tables.schema.json`，用于约束 DSL 本身
+- 新增 `source_priority_profiles`、`normalization_profiles`、`derived_fields`
+- 新增 `scripts/dsl_validator.py`，用于校验 DSL 结构和关键执行约束
+
+### 改进
+- 将原先的“条件名列表”升级为可校验的条件表达式
+- 明确地址、行政区划、坐标边界和人工核实信号的 DSL 表达方式
+- 降低模型在证据选择、解释生成和规则解释上的自由度
+
+## [2.0.0] - 2026-03-16
+
+### 重构
+- 将质检维度重构为 6 个核心维度加 1 个降级一致性维度
+- 新增独立的 `address` 维度，并将 `location` 明确定义为仅校验坐标
+- 移除单独的 `downgrade` 维度，改为直接比较 QC 与上游是否都需要人工核实
+
+### 规则
+- 引入 `rules/decision_tables.json` 作为唯一权威规则来源
+- 将旧版 Markdown 规则文档降级为解释材料，避免模型在多份文档之间自由发挥
+- 将规则注册表收敛为 `R1-R7`
+
+### 评分
+- 重构为固定 100 分权重制，不再使用比例换算公式
+- 新增 `config/scoring_policy.json`，支持按维度权重和状态系数反算得分
+- 修复“分数超过 100”这一类规范级问题
+
+### 校验
+- 重写 `result_validator.py`，增加 Schema 校验、评分反算、统计标记一致性校验
+- 修复结果文件命名校验与文件类型识别中的历史 bug
+- 强制所有维度输出 `evidence` 数组
+
+### 示例
+- 更新输入输出样例以匹配新维度与新评分体系
+- 新增地址冲突和降级一致性相关回归场景
+
+## [1.1.0] - 2024-01-15
+
+### 新增
+- 新增规则引擎模块，实现规则的加载、匹配和分数聚合
+- 新增降级检查器，实现数据质量降级的自动检测
+- 新增配置管理模块，支持评分权重、降级策略和风险维度的配置
+- 新增示例文件，提供测试和回归用例
+
+### 改进
+- 优化规则结构，将规则按类别分类管理
+- 改进评分算法，支持多维度风险评估
+- 优化输出结果格式，提供更详细的规则触发信息
+
+### 修复
+- 修复规则匹配逻辑中的边界情况
+- 修复分数计算中的溢出问题
+
+## [1.0.0] - 2024-01-01
+
+### 初始版本
+- 实现基本的 QC 验证功能
+- 支持核心规则的配置和执行
+- 提供基本的评分和降级功能

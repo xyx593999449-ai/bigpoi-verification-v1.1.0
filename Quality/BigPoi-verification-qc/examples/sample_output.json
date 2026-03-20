@@ -1,0 +1,312 @@
+{
+  "task_id": "TASK_STARBUCKS_001",
+  "qc_status": "qualified",
+  "qc_score": 100,
+  "has_risk": false,
+  "risk_dims": [],
+  "triggered_rules": [],
+  "dimension_results": {
+    "existence": {
+      "status": "pass",
+      "risk_level": "none",
+      "explanation": "至少两条有效证据支持 POI 存在，且不存在有效冲突证据。",
+      "related_rules": [],
+      "confidence": 0.95,
+      "evidence": [
+        {
+          "evidence_id": "EVID001",
+          "source": {
+            "source_id": "SOURCE001",
+            "source_name": "高德地图",
+            "source_type": "地图数据"
+          },
+          "data": {
+            "existence": true
+          },
+          "verification": {
+            "is_valid": true,
+            "confidence": 0.95
+          }
+        },
+        {
+          "evidence_id": "EVID002",
+          "source": {
+            "source_id": "SOURCE002",
+            "source_name": "百度地图",
+            "source_type": "地图数据"
+          },
+          "data": {
+            "existence": true
+          },
+          "verification": {
+            "is_valid": true,
+            "confidence": 0.92
+          }
+        }
+      ]
+    },
+    "name": {
+      "status": "pass",
+      "risk_level": "none",
+      "explanation": "名称在多条有效证据中完全一致，名称相似度满足通过条件。",
+      "related_rules": [],
+      "confidence": 1.0,
+      "evidence": [
+        {
+          "evidence_id": "EVID001",
+          "source": {
+            "source_id": "SOURCE001",
+            "source_name": "高德地图",
+            "source_type": "地图数据"
+          },
+          "data": {
+            "name": "星巴克咖啡"
+          },
+          "verification": {
+            "is_valid": true,
+            "confidence": 0.95
+          },
+          "matching": {
+            "name_similarity": 1.0,
+            "is_match": true
+          }
+        },
+        {
+          "evidence_id": "EVID002",
+          "source": {
+            "source_id": "SOURCE002",
+            "source_name": "百度地图",
+            "source_type": "地图数据"
+          },
+          "data": {
+            "name": "星巴克咖啡"
+          },
+          "verification": {
+            "is_valid": true,
+            "confidence": 0.92
+          },
+          "matching": {
+            "name_similarity": 1.0,
+            "is_match": true
+          }
+        }
+      ]
+    },
+    "location": {
+      "status": "pass",
+      "risk_level": "none",
+      "explanation": "坐标偏离均小于 50 米，且不存在跨市或跨省边界冲突。",
+      "related_rules": [],
+      "confidence": 0.9,
+      "evidence": [
+        {
+          "evidence_id": "EVID001",
+          "source": {
+            "source_id": "SOURCE001",
+            "source_name": "高德地图",
+            "source_type": "地图数据"
+          },
+          "data": {
+            "location": {
+              "longitude": 116.4074,
+              "latitude": 39.9042
+            }
+          },
+          "verification": {
+            "is_valid": true,
+            "confidence": 0.95
+          },
+          "matching": {
+            "location_distance": 0,
+            "is_match": true
+          }
+        },
+        {
+          "evidence_id": "EVID002",
+          "source": {
+            "source_id": "SOURCE002",
+            "source_name": "百度地图",
+            "source_type": "地图数据"
+          },
+          "data": {
+            "location": {
+              "longitude": 116.4075,
+              "latitude": 39.9043
+            }
+          },
+          "verification": {
+            "is_valid": true,
+            "confidence": 0.92
+          },
+          "matching": {
+            "location_distance": 15,
+            "is_match": true
+          }
+        }
+      ]
+    },
+    "address": {
+      "status": "pass",
+      "risk_level": "none",
+      "explanation": "地址文本在多条有效证据中一致，街道和门牌号均相符。",
+      "related_rules": [],
+      "confidence": 0.93,
+      "evidence": [
+        {
+          "evidence_id": "EVID001",
+          "source": {
+            "source_id": "SOURCE001",
+            "source_name": "高德地图",
+            "source_type": "地图数据"
+          },
+          "data": {
+            "location": {
+              "address": "北京市东城区王府井大街88号"
+            }
+          },
+          "verification": {
+            "is_valid": true,
+            "confidence": 0.95
+          }
+        },
+        {
+          "evidence_id": "EVID002",
+          "source": {
+            "source_id": "SOURCE002",
+            "source_name": "百度地图",
+            "source_type": "地图数据"
+          },
+          "data": {
+            "location": {
+              "address": "北京市东城区王府井大街88号"
+            }
+          },
+          "verification": {
+            "is_valid": true,
+            "confidence": 0.92
+          }
+        }
+      ]
+    },
+    "administrative": {
+      "status": "pass",
+      "risk_level": "none",
+      "explanation": "省市区与有效证据中的行政区划完全一致。",
+      "related_rules": [],
+      "confidence": 0.92,
+      "evidence": [
+        {
+          "evidence_id": "EVID001",
+          "source": {
+            "source_id": "SOURCE001",
+            "source_name": "高德地图",
+            "source_type": "地图数据"
+          },
+          "data": {
+            "administrative": {
+              "province": "北京市",
+              "city": "北京市",
+              "district": "东城区"
+            }
+          },
+          "verification": {
+            "is_valid": true,
+            "confidence": 0.95
+          }
+        },
+        {
+          "evidence_id": "EVID002",
+          "source": {
+            "source_id": "SOURCE002",
+            "source_name": "百度地图",
+            "source_type": "地图数据"
+          },
+          "data": {
+            "administrative": {
+              "province": "北京市",
+              "city": "北京市",
+              "district": "东城区"
+            }
+          },
+          "verification": {
+            "is_valid": true,
+            "confidence": 0.92
+          }
+        }
+      ]
+    },
+    "category": {
+      "status": "pass",
+      "risk_level": "none",
+      "explanation": "类型匹配度满足通过条件，且不存在业务类型冲突。",
+      "related_rules": [],
+      "confidence": 0.95,
+      "evidence": [
+        {
+          "evidence_id": "EVID001",
+          "source": {
+            "source_id": "SOURCE001",
+            "source_name": "高德地图",
+            "source_type": "地图数据"
+          },
+          "data": {
+            "category": "餐饮服务"
+          },
+          "verification": {
+            "is_valid": true,
+            "confidence": 0.95
+          },
+          "matching": {
+            "category_match": 1.0,
+            "is_match": true
+          }
+        },
+        {
+          "evidence_id": "EVID002",
+          "source": {
+            "source_id": "SOURCE002",
+            "source_name": "百度地图",
+            "source_type": "地图数据"
+          },
+          "data": {
+            "category": "餐饮服务"
+          },
+          "verification": {
+            "is_valid": true,
+            "confidence": 0.92
+          },
+          "matching": {
+            "category_match": 1.0,
+            "is_match": true
+          }
+        }
+      ]
+    },
+    "downgrade_consistency": {
+      "status": "pass",
+      "risk_level": "none",
+      "explanation": "核心维度均通过，QC 与上游都不需要人工核实，判断一致。",
+      "is_consistent": true,
+      "issue_type": "consistent",
+      "qc_manual_review_required": false,
+      "upstream_manual_review_required": false,
+      "related_rules": [],
+      "confidence": 1.0,
+      "evidence": [
+        {
+          "qc_manual_review_required": false,
+          "upstream_manual_review_required": false
+        }
+      ]
+    }
+  },
+  "explanation": "六个核心维度均通过，且人工核实一致性正常。",
+  "statistics_flags": {
+    "is_qualified": true,
+    "is_auto_approvable": true,
+    "is_manual_required": false,
+    "qc_manual_review_required": false,
+    "upstream_manual_review_required": false,
+    "downgrade_issue_type": "consistent"
+  }
+}

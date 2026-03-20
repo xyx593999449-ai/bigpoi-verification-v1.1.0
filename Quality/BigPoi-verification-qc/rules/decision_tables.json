@@ -1,0 +1,2786 @@
+{
+  "version": "2.1.0",
+  "dsl_version": "1.0.0",
+  "authoritative": true,
+  "execution_model": "deterministic_rule_dsl",
+  "workflow": [
+    "integrity_check",
+    "normalize_record_and_evidence",
+    "compute_dimension_metrics",
+    "evaluate_dimension_outcomes",
+    "derive_manual_review_flags",
+    "evaluate_downgrade_consistency",
+    "calculate_score",
+    "aggregate_result"
+  ],
+  "integrity_check": {
+    "required_record_fields": [
+      "record.task_id",
+      "record.name",
+      "record.location.longitude",
+      "record.location.latitude",
+      "record.location.address",
+      "record.administrative.province",
+      "record.administrative.city",
+      "record.administrative.district",
+      "record.category",
+      "record.existence"
+    ],
+    "required_evidence_fields": [
+      "evidence_id",
+      "source",
+      "data",
+      "verification.is_valid",
+      "verification.confidence"
+    ],
+    "minimum_evidence_count": 1,
+    "on_failure": {
+      "dimension_status": "fail",
+      "risk_level": "high",
+      "qc_status": "unqualified",
+      "qc_score": 0,
+      "dimension_impacts": {
+        "record.name": ["name"],
+        "record.location.longitude": ["location"],
+        "record.location.latitude": ["location"],
+        "record.location.address": ["address", "administrative"],
+        "record.administrative.province": ["administrative"],
+        "record.administrative.city": ["administrative"],
+        "record.administrative.district": ["administrative"],
+        "record.category": ["category"],
+        "record.existence": ["existence"],
+        "record.task_id": ["existence", "name", "location", "address", "administrative", "category", "downgrade_consistency"],
+        "evidence_data": ["existence", "name", "location", "address", "administrative", "category", "downgrade_consistency"]
+      }
+    }
+  },
+  "source_priority_profiles": {
+    "default": [
+      {
+        "match": {
+          "source_type": ["business_license", "official_registry", "government", "official_data"]
+        },
+        "priority": 1,
+        "authoritative": true
+      },
+      {
+        "match": {
+          "source_type": ["map_data", "map"]
+        },
+        "priority": 2,
+        "authoritative": false
+      },
+      {
+        "match": {
+          "source_type": ["platform", "ota", "merchant"]
+        },
+        "priority": 3,
+        "authoritative": false
+      },
+      {
+        "match": {
+          "source_type": ["ugc", "review", "unknown"]
+        },
+        "priority": 4,
+        "authoritative": false
+      }
+    ]
+  },
+  "normalization_profiles": {
+    "name": {
+      "steps": [
+        "trim",
+        "collapse_whitespace",
+        "fullwidth_to_halfwidth",
+        "lower_ascii",
+        "remove_company_suffix",
+        "remove_common_branch_suffix"
+      ],
+      "company_suffix_tokens": ["有限公司", "有限责任公司", "股份有限公司"],
+      "branch_suffix_tokens": ["店", "门店", "旗舰店", "分店", "直营店"]
+    },
+    "address": {
+      "steps": [
+        "trim",
+        "collapse_whitespace",
+        "fullwidth_to_halfwidth",
+        "remove_punctuation",
+        "normalize_chinese_numerals",
+        "normalize_building_alias"
+      ],
+      "ignorable_suffix_tokens": ["室", "层", "楼", "铺位", "号铺"],
+      "branch_suffix_tokens": ["店", "门店", "分店", "旗舰店"]
+    },
+    "administrative": {
+      "steps": [
+        "trim",
+        "collapse_whitespace",
+        "remove_admin_suffix"
+      ],
+      "province_suffix_tokens": ["省", "市", "自治区", "特别行政区"],
+      "city_suffix_tokens": ["市", "地区", "盟", "自治州"],
+      "district_suffix_tokens": ["区", "县", "旗", "自治县"]
+    },
+    "category": {
+      "steps": [
+        "trim",
+        "collapse_whitespace",
+        "lower_ascii"
+      ],
+      "path_separator": "/"
+    }
+  },
+  "function_catalog": [
+    {
+      "name": "count",
+      "returns": "number",
+      "description": "Count items under selector when condition is true."
+    },
+    {
+      "name": "avg",
+      "returns": "number",
+      "description": "Average a numeric field under selector when condition is true."
+    },
+    {
+      "name": "max",
+      "returns": "number",
+      "description": "Maximum numeric field under selector when condition is true."
+    },
+    {
+      "name": "count_match_level",
+      "returns": "number",
+      "description": "Count items whose custom match function returns one of the configured levels."
+    },
+    {
+      "name": "max_match_level",
+      "returns": "string",
+      "description": "Return the highest configured match level across all selected items."
+    }
+  ],
+  "derived_fields": {
+    "qc_manual_review_required": {
+      "type": "boolean",
+      "expression": {
+        "any": [
+          {
+            "left": {
+              "ref": "dimension.existence.status"
+            },
+            "op": "ne",
+            "right": "pass"
+          },
+          {
+            "left": {
+              "ref": "dimension.name.status"
+            },
+            "op": "ne",
+            "right": "pass"
+          },
+          {
+            "left": {
+              "ref": "dimension.location.status"
+            },
+            "op": "ne",
+            "right": "pass"
+          },
+          {
+            "left": {
+              "ref": "dimension.address.status"
+            },
+            "op": "ne",
+            "right": "pass"
+          },
+          {
+            "left": {
+              "ref": "dimension.administrative.status"
+            },
+            "op": "ne",
+            "right": "pass"
+          },
+          {
+            "left": {
+              "ref": "dimension.category.status"
+            },
+            "op": "ne",
+            "right": "pass"
+          }
+        ]
+      }
+    },
+    "upstream_manual_review_signal_source": {
+      "type": "string",
+      "resolution_order": [
+        {
+          "name": "downgrade_info.is_downgraded",
+          "when": {
+            "left": {
+              "ref": "upstream_decision.downgrade_info.is_downgraded"
+            },
+            "op": "exists"
+          },
+          "value": "downgrade_info.is_downgraded"
+        },
+        {
+          "name": "overall.action.manual_review",
+          "when": {
+            "left": {
+              "ref": "upstream_decision.overall.action"
+            },
+            "op": "eq",
+            "right": "manual_review"
+          },
+          "value": "overall.action"
+        },
+        {
+          "name": "overall.status.manual_review_or_downgraded",
+          "when": {
+            "left": {
+              "ref": "upstream_decision.overall.status"
+            },
+            "op": "in",
+            "right": ["manual_review", "downgraded"]
+          },
+          "value": "overall.status"
+        }
+      ],
+      "default": "unresolved"
+    },
+    "upstream_manual_review_required": {
+      "type": "boolean",
+      "resolution_order": [
+        {
+          "name": "downgrade_info.is_downgraded",
+          "when": {
+            "left": {
+              "ref": "upstream_decision.downgrade_info.is_downgraded"
+            },
+            "op": "exists"
+          },
+          "value": {
+            "ref": "upstream_decision.downgrade_info.is_downgraded"
+          }
+        },
+        {
+          "name": "overall.action.manual_review",
+          "when": {
+            "left": {
+              "ref": "upstream_decision.overall.action"
+            },
+            "op": "eq",
+            "right": "manual_review"
+          },
+          "value": true
+        },
+        {
+          "name": "overall.status.manual_review_or_downgraded",
+          "when": {
+            "left": {
+              "ref": "upstream_decision.overall.status"
+            },
+            "op": "in",
+            "right": ["manual_review", "downgraded"]
+          },
+          "value": true
+        }
+      ],
+      "default": false
+    }
+  },
+  "dimensions": {
+    "existence": {
+      "rule_id": "R1",
+      "title": "存在性一致性检查",
+      "record_selector": "record.existence",
+      "evidence_selector": "evidence_data[]",
+      "source_priority_profile": "default",
+      "evaluation": {
+        "order": ["fail", "risk", "pass"],
+        "mode": "first_match"
+      },
+      "metrics": [
+        {
+          "name": "valid_existence_evidence_count",
+          "function": "count",
+          "selector": "evidence_data[]",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.data.existence"
+                },
+                "op": "exists"
+              }
+            ]
+          }
+        },
+        {
+          "name": "support_count",
+          "function": "count",
+          "selector": "evidence_data[]",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.data.existence"
+                },
+                "op": "eq",
+                "right": {
+                  "ref": "record.existence"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "high_confidence_support_count",
+          "function": "count",
+          "selector": "evidence_data[]",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.data.existence"
+                },
+                "op": "eq",
+                "right": {
+                  "ref": "record.existence"
+                }
+              },
+              {
+                "left": {
+                  "ref": "evidence.verification.confidence"
+                },
+                "op": "gte",
+                "right": 0.85
+              }
+            ]
+          }
+        },
+        {
+          "name": "conflict_count",
+          "function": "count",
+          "selector": "evidence_data[]",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.data.existence"
+                },
+                "op": "ne",
+                "right": {
+                  "ref": "record.existence"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "authoritative_conflict_count",
+          "function": "count",
+          "selector": "evidence_data[]",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.source.source_type"
+                },
+                "op": "in",
+                "right": ["business_license", "official_registry", "government", "official_data"]
+              },
+              {
+                "left": {
+                  "ref": "evidence.data.existence"
+                },
+                "op": "ne",
+                "right": {
+                  "ref": "record.existence"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "average_confidence",
+          "function": "avg",
+          "selector": "evidence_data[]",
+          "field": "evidence.verification.confidence",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.data.existence"
+                },
+                "op": "exists"
+              }
+            ]
+          }
+        }
+      ],
+      "outcomes": [
+        {
+          "id": "existence_fail_no_valid_evidence",
+          "status": "fail",
+          "risk_level": "high",
+          "issue_code": "no_valid_existence_evidence",
+          "trigger_rule": "R1",
+          "when": {
+            "left": {
+              "ref": "metric.valid_existence_evidence_count"
+            },
+            "op": "eq",
+            "right": 0
+          },
+          "explanation_template": "存在性失败：没有有效证据支撑 record.existence。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "left": {
+                "ref": "evidence.data.existence"
+              },
+              "op": "exists"
+            },
+            "min_items": 0,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "existence_fail_authoritative_conflict",
+          "status": "fail",
+          "risk_level": "high",
+          "issue_code": "authoritative_existence_conflict",
+          "trigger_rule": "R1",
+          "when": {
+            "left": {
+              "ref": "metric.authoritative_conflict_count"
+            },
+            "op": "gte",
+            "right": 1
+          },
+          "explanation_template": "存在性失败：至少一条权威证据与 record.existence 直接冲突。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "all": [
+                {
+                  "left": {
+                    "ref": "evidence.verification.is_valid"
+                  },
+                  "op": "eq",
+                  "right": true
+                },
+                {
+                  "left": {
+                    "ref": "evidence.source.source_type"
+                  },
+                  "op": "in",
+                  "right": ["business_license", "official_registry", "government", "official_data"]
+                },
+                {
+                  "left": {
+                    "ref": "evidence.data.existence"
+                  },
+                  "op": "ne",
+                  "right": {
+                    "ref": "record.existence"
+                  }
+                }
+              ]
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "existence_fail_low_confidence",
+          "status": "fail",
+          "risk_level": "high",
+          "issue_code": "low_existence_confidence",
+          "trigger_rule": "R1",
+          "when": {
+            "left": {
+              "ref": "metric.average_confidence"
+            },
+            "op": "lt",
+            "right": 0.5
+          },
+          "explanation_template": "存在性失败：有效证据平均置信度低于 0.50。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "left": {
+                "ref": "evidence.data.existence"
+              },
+              "op": "exists"
+            },
+            "min_items": 0,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "existence_risk_single_support",
+          "status": "risk",
+          "risk_level": "medium",
+          "issue_code": "single_supporting_existence_evidence",
+          "trigger_rule": "R1",
+          "when": {
+            "all": [
+              {
+                "left": {
+                  "ref": "metric.support_count"
+                },
+                "op": "eq",
+                "right": 1
+              },
+              {
+                "left": {
+                  "ref": "metric.conflict_count"
+                },
+                "op": "eq",
+                "right": 0
+              },
+              {
+                "left": {
+                  "ref": "metric.high_confidence_support_count"
+                },
+                "op": "eq",
+                "right": 0
+              }
+            ]
+          },
+          "explanation_template": "存在性风险：仅有 1 条有效支持证据，且该证据置信度不足以单独稳定支撑 record.existence。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "all": [
+                {
+                  "left": {
+                    "ref": "evidence.verification.is_valid"
+                  },
+                  "op": "eq",
+                  "right": true
+                },
+                {
+                  "left": {
+                    "ref": "evidence.data.existence"
+                  },
+                  "op": "eq",
+                  "right": {
+                    "ref": "record.existence"
+                  }
+                }
+              ]
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "existence_risk_mixed_support",
+          "status": "risk",
+          "risk_level": "medium",
+          "issue_code": "mixed_existence_evidence",
+          "trigger_rule": "R1",
+          "when": {
+            "all": [
+              {
+                "left": {
+                  "ref": "metric.conflict_count"
+                },
+                "op": "gte",
+                "right": 1
+              },
+              {
+                "left": {
+                  "ref": "metric.support_count"
+                },
+                "op": "gt",
+                "right": {
+                  "ref": "metric.conflict_count"
+                }
+              }
+            ]
+          },
+          "explanation_template": "存在性风险：有效证据存在冲突，但支持证据仍多于冲突证据。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "left": {
+                "ref": "evidence.data.existence"
+              },
+              "op": "exists"
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "existence_risk_moderate_confidence",
+          "status": "risk",
+          "risk_level": "low",
+          "issue_code": "moderate_existence_confidence",
+          "trigger_rule": "R1",
+          "when": {
+            "left": {
+              "ref": "metric.average_confidence"
+            },
+            "op": "between",
+            "lower": 0.5,
+            "upper": 0.69
+          },
+          "explanation_template": "存在性风险：有效证据平均置信度介于 0.50 和 0.69 之间。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "left": {
+                "ref": "evidence.data.existence"
+              },
+              "op": "exists"
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "existence_pass_multi_support",
+          "status": "pass",
+          "risk_level": "none",
+          "issue_code": "existence_supported",
+          "trigger_rule": "R1",
+          "when": {
+            "all": [
+              {
+                "left": {
+                  "ref": "metric.conflict_count"
+                },
+                "op": "eq",
+                "right": 0
+              },
+              {
+                "left": {
+                  "ref": "metric.average_confidence"
+                },
+                "op": "gte",
+                "right": 0.7
+              },
+              {
+                "any": [
+                  {
+                    "left": {
+                      "ref": "metric.support_count"
+                    },
+                    "op": "gte",
+                    "right": 2
+                  },
+                  {
+                    "left": {
+                      "ref": "metric.high_confidence_support_count"
+                    },
+                    "op": "gte",
+                    "right": 1
+                  }
+                ]
+              }
+            ]
+          },
+          "explanation_template": "存在性通过：多条有效证据支持，或单条高置信度有效证据已足以稳定支持 record.existence，且不存在有效冲突证据。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "all": [
+                {
+                  "left": {
+                    "ref": "evidence.verification.is_valid"
+                  },
+                  "op": "eq",
+                  "right": true
+                },
+                {
+                  "left": {
+                    "ref": "evidence.data.existence"
+                  },
+                  "op": "eq",
+                  "right": {
+                    "ref": "record.existence"
+                  }
+                }
+              ]
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        }
+      ]
+    },
+    "name": {
+      "rule_id": "R2",
+      "title": "名称一致性检查",
+      "record_selector": "record.name",
+      "evidence_selector": "evidence_data[]",
+      "source_priority_profile": "default",
+      "normalization_profile": "name",
+      "evaluation": {
+        "order": ["fail", "risk", "pass"],
+        "mode": "first_match"
+      },
+      "metrics": [
+        {
+          "name": "valid_name_evidence_count",
+          "function": "count",
+          "selector": "evidence_data[]",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.data.name"
+                },
+                "op": "exists"
+              }
+            ]
+          }
+        },
+        {
+          "name": "strong_support_count",
+          "function": "count",
+          "selector": "evidence_data[]",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.matching.name_similarity"
+                },
+                "op": "gte",
+                "right": 0.85
+              }
+            ]
+          }
+        },
+        {
+          "name": "high_confidence_strong_support_count",
+          "function": "count",
+          "selector": "evidence_data[]",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.matching.name_similarity"
+                },
+                "op": "gte",
+                "right": 0.95
+              },
+              {
+                "left": {
+                  "ref": "evidence.verification.confidence"
+                },
+                "op": "gte",
+                "right": 0.9
+              }
+            ]
+          }
+        },
+        {
+          "name": "medium_support_count",
+          "function": "count",
+          "selector": "evidence_data[]",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.matching.name_similarity"
+                },
+                "op": "between",
+                "lower": 0.6,
+                "upper": 0.84
+              }
+            ]
+          }
+        },
+        {
+          "name": "hard_conflict_count",
+          "function": "count",
+          "selector": "evidence_data[]",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.matching.name_similarity"
+                },
+                "op": "lt",
+                "right": 0.6
+              }
+            ]
+          }
+        },
+        {
+          "name": "best_similarity",
+          "function": "max",
+          "selector": "evidence_data[]",
+          "field": "evidence.matching.name_similarity",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.data.name"
+                },
+                "op": "exists"
+              }
+            ]
+          }
+        }
+      ],
+      "outcomes": [
+        {
+          "id": "name_fail_no_valid_evidence",
+          "status": "fail",
+          "risk_level": "high",
+          "issue_code": "no_valid_name_evidence",
+          "trigger_rule": "R2",
+          "when": {
+            "left": {
+              "ref": "metric.valid_name_evidence_count"
+            },
+            "op": "eq",
+            "right": 0
+          },
+          "explanation_template": "名称失败：没有有效名称证据。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "left": {
+                "ref": "evidence.data.name"
+              },
+              "op": "exists"
+            },
+            "min_items": 0,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "name_fail_low_similarity",
+          "status": "fail",
+          "risk_level": "high",
+          "issue_code": "all_name_similarity_below_threshold",
+          "trigger_rule": "R2",
+          "when": {
+            "left": {
+              "ref": "metric.best_similarity"
+            },
+            "op": "lt",
+            "right": 0.6
+          },
+          "explanation_template": "名称失败：所有有效名称证据与 record.name 的相似度都低于 0.60。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "left": {
+                "ref": "evidence.data.name"
+              },
+              "op": "exists"
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "name_risk_single_strong_support",
+          "status": "risk",
+          "risk_level": "medium",
+          "issue_code": "single_strong_name_support",
+          "trigger_rule": "R2",
+          "when": {
+            "all": [
+              {
+                "left": {
+                  "ref": "metric.strong_support_count"
+                },
+                "op": "eq",
+                "right": 1
+              },
+              {
+                "left": {
+                  "ref": "metric.hard_conflict_count"
+                },
+                "op": "eq",
+                "right": 0
+              },
+              {
+                "left": {
+                  "ref": "metric.high_confidence_strong_support_count"
+                },
+                "op": "eq",
+                "right": 0
+              }
+            ]
+          },
+          "explanation_template": "名称风险：仅有 1 条强支持名称证据，且该证据置信度或相似度不足以单独稳定支持 record.name。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "all": [
+                {
+                  "left": {
+                    "ref": "evidence.verification.is_valid"
+                  },
+                  "op": "eq",
+                  "right": true
+                },
+                {
+                  "left": {
+                    "ref": "evidence.matching.name_similarity"
+                  },
+                  "op": "gte",
+                  "right": 0.85
+                }
+              ]
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "name_risk_medium_similarity",
+          "status": "risk",
+          "risk_level": "medium",
+          "issue_code": "medium_name_similarity",
+          "trigger_rule": "R2",
+          "when": {
+            "all": [
+              {
+                "left": {
+                  "ref": "metric.medium_support_count"
+                },
+                "op": "gte",
+                "right": 1
+              },
+              {
+                "left": {
+                  "ref": "metric.strong_support_count"
+                },
+                "op": "eq",
+                "right": 0
+              }
+            ]
+          },
+          "explanation_template": "名称风险：有效名称证据相似度处于 0.60-0.84 区间。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "all": [
+                {
+                  "left": {
+                    "ref": "evidence.verification.is_valid"
+                  },
+                  "op": "eq",
+                  "right": true
+                },
+                {
+                  "left": {
+                    "ref": "evidence.matching.name_similarity"
+                  },
+                  "op": "between",
+                  "lower": 0.6,
+                  "upper": 0.84
+                }
+              ]
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "name_pass_multi_strong_support",
+          "status": "pass",
+          "risk_level": "none",
+          "issue_code": "name_supported",
+          "trigger_rule": "R2",
+          "when": {
+            "all": [
+              {
+                "left": {
+                  "ref": "metric.hard_conflict_count"
+                },
+                "op": "eq",
+                "right": 0
+              },
+              {
+                "any": [
+                  {
+                    "left": {
+                      "ref": "metric.strong_support_count"
+                    },
+                    "op": "gte",
+                    "right": 2
+                  },
+                  {
+                    "left": {
+                      "ref": "metric.high_confidence_strong_support_count"
+                    },
+                    "op": "gte",
+                    "right": 1
+                  }
+                ]
+              }
+            ]
+          },
+          "explanation_template": "名称通过：多条强支持证据，或单条高置信度强支持证据已足以稳定支持 record.name，且不存在硬冲突。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "all": [
+                {
+                  "left": {
+                    "ref": "evidence.verification.is_valid"
+                  },
+                  "op": "eq",
+                  "right": true
+                },
+                {
+                  "left": {
+                    "ref": "evidence.matching.name_similarity"
+                  },
+                  "op": "gte",
+                  "right": 0.85
+                }
+              ]
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        }
+      ]
+    },
+    "location": {
+      "rule_id": "R3",
+      "title": "坐标一致性检查",
+      "record_selector": "record.location",
+      "evidence_selector": "evidence_data[]",
+      "source_priority_profile": "default",
+      "evaluation": {
+        "order": ["fail", "risk", "pass"],
+        "mode": "first_match"
+      },
+      "metrics": [
+        {
+          "name": "valid_coordinate_evidence_count",
+          "function": "count",
+          "selector": "evidence_data[]",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.data.location.longitude"
+                },
+                "op": "exists"
+              },
+              {
+                "left": {
+                  "ref": "evidence.data.location.latitude"
+                },
+                "op": "exists"
+              }
+            ]
+          }
+        },
+        {
+          "name": "support_within_50m_count",
+          "function": "count",
+          "selector": "evidence_data[]",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.matching.location_distance"
+                },
+                "op": "lt",
+                "right": 50
+              }
+            ]
+          }
+        },
+        {
+          "name": "high_confidence_support_within_30m_count",
+          "function": "count",
+          "selector": "evidence_data[]",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.matching.location_distance"
+                },
+                "op": "lt",
+                "right": 30
+              },
+              {
+                "left": {
+                  "ref": "evidence.verification.confidence"
+                },
+                "op": "gte",
+                "right": 0.85
+              }
+            ]
+          }
+        },
+        {
+          "name": "max_distance_meters",
+          "function": "max",
+          "selector": "evidence_data[]",
+          "field": "evidence.matching.location_distance",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.matching.location_distance"
+                },
+                "op": "exists"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authoritative_max_distance_meters",
+          "function": "max",
+          "selector": "evidence_data[]",
+          "field": "evidence.matching.location_distance",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.source.source_type"
+                },
+                "op": "in",
+                "right": ["business_license", "official_registry", "government", "official_data", "map_data", "map"]
+              },
+              {
+                "left": {
+                  "ref": "evidence.matching.location_distance"
+                },
+                "op": "exists"
+              }
+            ]
+          }
+        },
+        {
+          "name": "boundary_conflict_level",
+          "function": "max_match_level",
+          "selector": "evidence_data[]",
+          "where": {
+            "left": {
+              "ref": "evidence.verification.is_valid"
+            },
+            "op": "eq",
+            "right": true
+          },
+          "params": {
+            "match_function": "coordinate_boundary_level",
+            "ordered_levels": ["none", "district", "city", "province"],
+            "record_coordinate_selector": "record.location",
+            "record_administrative_selector": "record.administrative",
+            "evidence_coordinate_selector": "evidence.data.location",
+            "evidence_administrative_selector": "evidence.data.administrative",
+            "evidence_address_selector": "evidence.data.location.address"
+          }
+        }
+      ],
+      "outcomes": [
+        {
+          "id": "location_fail_no_valid_coordinate",
+          "status": "fail",
+          "risk_level": "high",
+          "issue_code": "no_valid_coordinate_evidence",
+          "trigger_rule": "R3",
+          "when": {
+            "left": {
+              "ref": "metric.valid_coordinate_evidence_count"
+            },
+            "op": "eq",
+            "right": 0
+          },
+          "explanation_template": "坐标失败：没有有效坐标证据。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "any": [
+                {
+                  "left": {
+                    "ref": "evidence.data.location.longitude"
+                  },
+                  "op": "exists"
+                },
+                {
+                  "left": {
+                    "ref": "evidence.data.location.latitude"
+                  },
+                  "op": "exists"
+                }
+              ]
+            },
+            "min_items": 0,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "location_fail_cross_city_or_province",
+          "status": "fail",
+          "risk_level": "high",
+          "issue_code": "cross_city_or_cross_province_boundary",
+          "trigger_rule": "R3",
+          "when": {
+            "left": {
+              "ref": "metric.boundary_conflict_level"
+            },
+            "op": "in",
+            "right": ["city", "province"]
+          },
+          "explanation_template": "坐标失败：坐标证据与 record.location 跨越市级或省级边界。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "left": {
+                "ref": "evidence.matching.location_distance"
+              },
+              "op": "exists"
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "location_fail_authoritative_distance",
+          "status": "fail",
+          "risk_level": "high",
+          "issue_code": "authoritative_distance_gt_200m",
+          "trigger_rule": "R3",
+          "when": {
+            "left": {
+              "ref": "metric.authoritative_max_distance_meters"
+            },
+            "op": "gt",
+            "right": 200
+          },
+          "explanation_template": "坐标失败：权威或高优先级位置证据与 record.location 偏离超过 200 米。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "all": [
+                {
+                  "left": {
+                    "ref": "evidence.verification.is_valid"
+                  },
+                  "op": "eq",
+                  "right": true
+                },
+                {
+                  "left": {
+                    "ref": "evidence.matching.location_distance"
+                  },
+                  "op": "gt",
+                  "right": 200
+                }
+              ]
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "location_risk_single_close_support",
+          "status": "risk",
+          "risk_level": "medium",
+          "issue_code": "single_coordinate_support",
+          "trigger_rule": "R3",
+          "when": {
+            "all": [
+              {
+                "left": {
+                  "ref": "metric.support_within_50m_count"
+                },
+                "op": "eq",
+                "right": 1
+              },
+              {
+                "left": {
+                  "ref": "metric.boundary_conflict_level"
+                },
+                "op": "eq",
+                "right": "none"
+              },
+              {
+                "left": {
+                  "ref": "metric.high_confidence_support_within_30m_count"
+                },
+                "op": "eq",
+                "right": 0
+              }
+            ]
+          },
+          "explanation_template": "坐标风险：仅有 1 条近距离坐标证据，且该证据距离或置信度不足以单独稳定支持 record.location。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "all": [
+                {
+                  "left": {
+                    "ref": "evidence.verification.is_valid"
+                  },
+                  "op": "eq",
+                  "right": true
+                },
+                {
+                  "left": {
+                    "ref": "evidence.matching.location_distance"
+                  },
+                  "op": "lt",
+                  "right": 50
+                }
+              ]
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "location_risk_mid_distance",
+          "status": "risk",
+          "risk_level": "medium",
+          "issue_code": "coordinate_distance_between_50_and_200",
+          "trigger_rule": "R3",
+          "when": {
+            "left": {
+              "ref": "metric.max_distance_meters"
+            },
+            "op": "between",
+            "lower": 50,
+            "upper": 200
+          },
+          "explanation_template": "坐标风险：有效坐标证据的最大偏离距离位于 50-200 米之间。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "all": [
+                {
+                  "left": {
+                    "ref": "evidence.verification.is_valid"
+                  },
+                  "op": "eq",
+                  "right": true
+                },
+                {
+                  "left": {
+                    "ref": "evidence.matching.location_distance"
+                  },
+                  "op": "between",
+                  "lower": 50,
+                  "upper": 200
+                }
+              ]
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "location_risk_district_boundary",
+          "status": "risk",
+          "risk_level": "low",
+          "issue_code": "district_boundary_conflict",
+          "trigger_rule": "R3",
+          "when": {
+            "left": {
+              "ref": "metric.boundary_conflict_level"
+            },
+            "op": "eq",
+            "right": "district"
+          },
+          "explanation_template": "坐标风险：坐标证据位于区县边界冲突范围内。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "left": {
+                "ref": "evidence.matching.location_distance"
+              },
+              "op": "exists"
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "location_pass_multi_close_support",
+          "status": "pass",
+          "risk_level": "none",
+          "issue_code": "coordinate_supported",
+          "trigger_rule": "R3",
+          "when": {
+            "all": [
+              {
+                "left": {
+                  "ref": "metric.max_distance_meters"
+                },
+                "op": "lt",
+                "right": 50
+              },
+              {
+                "left": {
+                  "ref": "metric.boundary_conflict_level"
+                },
+                "op": "eq",
+                "right": "none"
+              },
+              {
+                "any": [
+                  {
+                    "left": {
+                      "ref": "metric.support_within_50m_count"
+                    },
+                    "op": "gte",
+                    "right": 2
+                  },
+                  {
+                    "left": {
+                      "ref": "metric.high_confidence_support_within_30m_count"
+                    },
+                    "op": "gte",
+                    "right": 1
+                  }
+                ]
+              }
+            ]
+          },
+          "explanation_template": "坐标通过：多条近距离坐标证据共同支持，或单条高置信度坐标证据在 30 米内即可稳定支持 record.location，且不存在边界冲突。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "all": [
+                {
+                  "left": {
+                    "ref": "evidence.verification.is_valid"
+                  },
+                  "op": "eq",
+                  "right": true
+                },
+                {
+                  "left": {
+                    "ref": "evidence.matching.location_distance"
+                  },
+                  "op": "lt",
+                  "right": 50
+                }
+              ]
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        }
+      ]
+    },
+    "address": {
+      "rule_id": "R4",
+      "title": "地址一致性检查",
+      "record_selector": "record.location.address",
+      "evidence_selector": "evidence_data[]",
+      "source_priority_profile": "default",
+      "normalization_profile": "address",
+      "evaluation": {
+        "order": ["fail", "risk", "pass"],
+        "mode": "first_match"
+      },
+      "metrics": [
+        {
+          "name": "valid_address_evidence_count",
+          "function": "count",
+          "selector": "evidence_data[]",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.data.location.address"
+                },
+                "op": "exists"
+              }
+            ]
+          }
+        },
+        {
+          "name": "exact_support_count",
+          "function": "count_match_level",
+          "selector": "evidence_data[]",
+          "where": {
+            "left": {
+              "ref": "evidence.verification.is_valid"
+            },
+            "op": "eq",
+            "right": true
+          },
+          "params": {
+            "match_function": "address_match_level",
+            "record_selector": "record.location.address",
+            "evidence_selector": "evidence.data.location.address",
+            "normalizer": "address",
+            "levels": ["exact"]
+          }
+        },
+        {
+          "name": "high_confidence_exact_support_count",
+          "function": "count_match_level",
+          "selector": "evidence_data[]",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.verification.confidence"
+                },
+                "op": "gte",
+                "right": 0.9
+              }
+            ]
+          },
+          "params": {
+            "match_function": "address_match_level",
+            "record_selector": "record.location.address",
+            "evidence_selector": "evidence.data.location.address",
+            "normalizer": "address",
+            "levels": ["exact"]
+          }
+        },
+        {
+          "name": "soft_support_count",
+          "function": "count_match_level",
+          "selector": "evidence_data[]",
+          "where": {
+            "left": {
+              "ref": "evidence.verification.is_valid"
+            },
+            "op": "eq",
+            "right": true
+          },
+          "params": {
+            "match_function": "address_match_level",
+            "record_selector": "record.location.address",
+            "evidence_selector": "evidence.data.location.address",
+            "normalizer": "address",
+            "levels": ["main_address_only", "branch_suffix_only", "missing_house_number", "ambiguous"]
+          }
+        },
+        {
+          "name": "hard_conflict_count",
+          "function": "count_match_level",
+          "selector": "evidence_data[]",
+          "where": {
+            "left": {
+              "ref": "evidence.verification.is_valid"
+            },
+            "op": "eq",
+            "right": true
+          },
+          "params": {
+            "match_function": "address_match_level",
+            "record_selector": "record.location.address",
+            "evidence_selector": "evidence.data.location.address",
+            "normalizer": "address",
+            "levels": ["city_district_conflict", "street_conflict", "house_number_conflict"]
+          }
+        }
+      ],
+      "outcomes": [
+        {
+          "id": "address_fail_no_valid_address",
+          "status": "fail",
+          "risk_level": "high",
+          "issue_code": "no_valid_address_evidence",
+          "trigger_rule": "R4",
+          "when": {
+            "left": {
+              "ref": "metric.valid_address_evidence_count"
+            },
+            "op": "eq",
+            "right": 0
+          },
+          "explanation_template": "地址失败：没有有效地址证据。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "left": {
+                "ref": "evidence.data.location.address"
+              },
+              "op": "exists"
+            },
+            "min_items": 0,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "address_fail_hard_conflict",
+          "status": "fail",
+          "risk_level": "high",
+          "issue_code": "address_direct_conflict",
+          "trigger_rule": "R4",
+          "when": {
+            "left": {
+              "ref": "metric.hard_conflict_count"
+            },
+            "op": "gte",
+            "right": 1
+          },
+          "explanation_template": "地址失败：有效地址证据与 record.location.address 存在城市、街道或门牌级直接冲突。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "left": {
+                "ref": "evidence.data.location.address"
+              },
+              "op": "exists"
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "address_risk_single_exact_support",
+          "status": "risk",
+          "risk_level": "medium",
+          "issue_code": "single_exact_address_support",
+          "trigger_rule": "R4",
+          "when": {
+            "all": [
+              {
+                "left": {
+                  "ref": "metric.exact_support_count"
+                },
+                "op": "eq",
+                "right": 1
+              },
+              {
+                "left": {
+                  "ref": "metric.hard_conflict_count"
+                },
+                "op": "eq",
+                "right": 0
+              },
+              {
+                "left": {
+                  "ref": "metric.high_confidence_exact_support_count"
+                },
+                "op": "eq",
+                "right": 0
+              }
+            ]
+          },
+          "explanation_template": "地址风险：仅有 1 条精确地址证据，且该证据置信度不足以单独稳定支持 record.location.address。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "left": {
+                "ref": "evidence.data.location.address"
+              },
+              "op": "exists"
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "address_risk_soft_match",
+          "status": "risk",
+          "risk_level": "medium",
+          "issue_code": "soft_address_match_only",
+          "trigger_rule": "R4",
+          "when": {
+            "all": [
+              {
+                "left": {
+                  "ref": "metric.soft_support_count"
+                },
+                "op": "gte",
+                "right": 1
+              },
+              {
+                "left": {
+                  "ref": "metric.exact_support_count"
+                },
+                "op": "eq",
+                "right": 0
+              }
+            ]
+          },
+          "explanation_template": "地址风险：有效地址证据只支持主地址、分支后缀或缺失门牌的软匹配。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "left": {
+                "ref": "evidence.data.location.address"
+              },
+              "op": "exists"
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "address_pass_multi_exact_support",
+          "status": "pass",
+          "risk_level": "none",
+          "issue_code": "address_supported",
+          "trigger_rule": "R4",
+          "when": {
+            "all": [
+              {
+                "left": {
+                  "ref": "metric.hard_conflict_count"
+                },
+                "op": "eq",
+                "right": 0
+              },
+              {
+                "any": [
+                  {
+                    "left": {
+                      "ref": "metric.exact_support_count"
+                    },
+                    "op": "gte",
+                    "right": 2
+                  },
+                  {
+                    "left": {
+                      "ref": "metric.high_confidence_exact_support_count"
+                    },
+                    "op": "gte",
+                    "right": 1
+                  }
+                ]
+              }
+            ]
+          },
+          "explanation_template": "地址通过：多条精确地址证据共同支持，或单条高置信度精确地址证据已足以稳定支持 record.location.address，且不存在硬冲突。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "left": {
+                "ref": "evidence.data.location.address"
+              },
+              "op": "exists"
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        }
+      ]
+    },
+    "administrative": {
+      "rule_id": "R5",
+      "title": "行政区划一致性检查",
+      "record_selector": "record.administrative",
+      "evidence_selector": "evidence_data[]",
+      "source_priority_profile": "default",
+      "normalization_profile": "administrative",
+      "evaluation": {
+        "order": ["fail", "risk", "pass"],
+        "mode": "first_match"
+      },
+      "metrics": [
+        {
+          "name": "valid_admin_evidence_count",
+          "function": "count",
+          "selector": "evidence_data[]",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "any": [
+                  {
+                    "left": {
+                      "ref": "evidence.data.administrative.province"
+                    },
+                    "op": "exists"
+                  },
+                  {
+                    "left": {
+                      "ref": "evidence.data.location.address"
+                    },
+                    "op": "exists"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "exact_support_count",
+          "function": "count_match_level",
+          "selector": "evidence_data[]",
+          "where": {
+            "left": {
+              "ref": "evidence.verification.is_valid"
+            },
+            "op": "eq",
+            "right": true
+          },
+          "params": {
+            "match_function": "administrative_match_level",
+            "record_selector": "record.administrative",
+            "evidence_admin_selector": "evidence.data.administrative",
+            "evidence_address_selector": "evidence.data.location.address",
+            "evidence_coordinate_selector": "evidence.data.location",
+            "normalizer": "administrative",
+            "levels": ["exact"]
+          }
+        },
+        {
+          "name": "high_confidence_exact_support_count",
+          "function": "count_match_level",
+          "selector": "evidence_data[]",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.verification.confidence"
+                },
+                "op": "gte",
+                "right": 0.9
+              }
+            ]
+          },
+          "params": {
+            "match_function": "administrative_match_level",
+            "record_selector": "record.administrative",
+            "evidence_admin_selector": "evidence.data.administrative",
+            "evidence_address_selector": "evidence.data.location.address",
+            "evidence_coordinate_selector": "evidence.data.location",
+            "normalizer": "administrative",
+            "levels": ["exact"]
+          }
+        },
+        {
+          "name": "soft_support_count",
+          "function": "count_match_level",
+          "selector": "evidence_data[]",
+          "where": {
+            "left": {
+              "ref": "evidence.verification.is_valid"
+            },
+            "op": "eq",
+            "right": true
+          },
+          "params": {
+            "match_function": "administrative_match_level",
+            "record_selector": "record.administrative",
+            "evidence_admin_selector": "evidence.data.administrative",
+            "evidence_address_selector": "evidence.data.location.address",
+            "evidence_coordinate_selector": "evidence.data.location",
+            "normalizer": "administrative",
+            "levels": ["province_city_only", "district_missing", "district_borderline"]
+          }
+        },
+        {
+          "name": "hard_conflict_count",
+          "function": "count_match_level",
+          "selector": "evidence_data[]",
+          "where": {
+            "left": {
+              "ref": "evidence.verification.is_valid"
+            },
+            "op": "eq",
+            "right": true
+          },
+          "params": {
+            "match_function": "administrative_match_level",
+            "record_selector": "record.administrative",
+            "evidence_admin_selector": "evidence.data.administrative",
+            "evidence_address_selector": "evidence.data.location.address",
+            "evidence_coordinate_selector": "evidence.data.location",
+            "normalizer": "administrative",
+            "levels": ["district_conflict", "city_conflict", "province_conflict", "coordinate_city_conflict", "coordinate_province_conflict"]
+          }
+        }
+      ],
+      "outcomes": [
+        {
+          "id": "administrative_fail_no_valid_evidence",
+          "status": "fail",
+          "risk_level": "high",
+          "issue_code": "no_valid_administrative_evidence",
+          "trigger_rule": "R5",
+          "when": {
+            "left": {
+              "ref": "metric.valid_admin_evidence_count"
+            },
+            "op": "eq",
+            "right": 0
+          },
+          "explanation_template": "行政区划失败：没有有效行政区划证据。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "any": [
+                {
+                  "left": {
+                    "ref": "evidence.data.administrative.province"
+                  },
+                  "op": "exists"
+                },
+                {
+                  "left": {
+                    "ref": "evidence.data.location.address"
+                  },
+                  "op": "exists"
+                }
+              ]
+            },
+            "min_items": 0,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "administrative_fail_hard_conflict",
+          "status": "fail",
+          "risk_level": "high",
+          "issue_code": "administrative_direct_conflict",
+          "trigger_rule": "R5",
+          "when": {
+            "left": {
+              "ref": "metric.hard_conflict_count"
+            },
+            "op": "gte",
+            "right": 1
+          },
+          "explanation_template": "行政区划失败：有效证据与 record.administrative 存在区县、市级或省级直接冲突。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "any": [
+                {
+                  "left": {
+                    "ref": "evidence.data.administrative.province"
+                  },
+                  "op": "exists"
+                },
+                {
+                  "left": {
+                    "ref": "evidence.data.location.address"
+                  },
+                  "op": "exists"
+                }
+              ]
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "administrative_risk_single_exact_support",
+          "status": "risk",
+          "risk_level": "medium",
+          "issue_code": "single_exact_admin_support",
+          "trigger_rule": "R5",
+          "when": {
+            "all": [
+              {
+                "left": {
+                  "ref": "metric.exact_support_count"
+                },
+                "op": "eq",
+                "right": 1
+              },
+              {
+                "left": {
+                  "ref": "metric.hard_conflict_count"
+                },
+                "op": "eq",
+                "right": 0
+              },
+              {
+                "left": {
+                  "ref": "metric.high_confidence_exact_support_count"
+                },
+                "op": "eq",
+                "right": 0
+              }
+            ]
+          },
+          "explanation_template": "行政区划风险：仅有 1 条精确行政区划证据，且该证据置信度不足以单独稳定支持 record.administrative。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "any": [
+                {
+                  "left": {
+                    "ref": "evidence.data.administrative.province"
+                  },
+                  "op": "exists"
+                },
+                {
+                  "left": {
+                    "ref": "evidence.data.location.address"
+                  },
+                  "op": "exists"
+                }
+              ]
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "administrative_risk_soft_support",
+          "status": "risk",
+          "risk_level": "medium",
+          "issue_code": "soft_admin_support",
+          "trigger_rule": "R5",
+          "when": {
+            "all": [
+              {
+                "left": {
+                  "ref": "metric.soft_support_count"
+                },
+                "op": "gte",
+                "right": 1
+              },
+              {
+                "left": {
+                  "ref": "metric.exact_support_count"
+                },
+                "op": "eq",
+                "right": 0
+              }
+            ]
+          },
+          "explanation_template": "行政区划风险：有效证据仅支持省市一致或区县边界附近的一致性。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "any": [
+                {
+                  "left": {
+                    "ref": "evidence.data.administrative.province"
+                  },
+                  "op": "exists"
+                },
+                {
+                  "left": {
+                    "ref": "evidence.data.location.address"
+                  },
+                  "op": "exists"
+                }
+              ]
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "administrative_pass_multi_exact_support",
+          "status": "pass",
+          "risk_level": "none",
+          "issue_code": "administrative_supported",
+          "trigger_rule": "R5",
+          "when": {
+            "all": [
+              {
+                "left": {
+                  "ref": "metric.hard_conflict_count"
+                },
+                "op": "eq",
+                "right": 0
+              },
+              {
+                "any": [
+                  {
+                    "left": {
+                      "ref": "metric.exact_support_count"
+                    },
+                    "op": "gte",
+                    "right": 2
+                  },
+                  {
+                    "left": {
+                      "ref": "metric.high_confidence_exact_support_count"
+                    },
+                    "op": "gte",
+                    "right": 1
+                  }
+                ]
+              }
+            ]
+          },
+          "explanation_template": "行政区划通过：多条精确证据共同支持，或单条高置信度精确证据已足以稳定支持 record.administrative，且不存在市级或省级冲突。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "any": [
+                {
+                  "left": {
+                    "ref": "evidence.data.administrative.province"
+                  },
+                  "op": "exists"
+                },
+                {
+                  "left": {
+                    "ref": "evidence.data.location.address"
+                  },
+                  "op": "exists"
+                }
+              ]
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        }
+      ]
+    },
+    "category": {
+      "rule_id": "R6",
+      "title": "类型一致性检查",
+      "record_selector": "record.category",
+      "evidence_selector": "evidence_data[]",
+      "source_priority_profile": "default",
+      "normalization_profile": "category",
+      "evaluation": {
+        "order": ["fail", "risk", "pass"],
+        "mode": "first_match"
+      },
+      "metrics": [
+        {
+          "name": "valid_category_evidence_count",
+          "function": "count",
+          "selector": "evidence_data[]",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.data.category"
+                },
+                "op": "exists"
+              }
+            ]
+          }
+        },
+        {
+          "name": "strong_support_count",
+          "function": "count",
+          "selector": "evidence_data[]",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.matching.category_match"
+                },
+                "op": "gte",
+                "right": 0.85
+              }
+            ]
+          }
+        },
+        {
+          "name": "high_confidence_strong_support_count",
+          "function": "count",
+          "selector": "evidence_data[]",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.matching.category_match"
+                },
+                "op": "gte",
+                "right": 0.95
+              },
+              {
+                "left": {
+                  "ref": "evidence.verification.confidence"
+                },
+                "op": "gte",
+                "right": 0.85
+              }
+            ]
+          }
+        },
+        {
+          "name": "medium_support_count",
+          "function": "count",
+          "selector": "evidence_data[]",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.matching.category_match"
+                },
+                "op": "between",
+                "lower": 0.6,
+                "upper": 0.84
+              }
+            ]
+          }
+        },
+        {
+          "name": "hard_conflict_count",
+          "function": "count",
+          "selector": "evidence_data[]",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.matching.category_match"
+                },
+                "op": "lt",
+                "right": 0.6
+              }
+            ]
+          }
+        },
+        {
+          "name": "best_match_score",
+          "function": "max",
+          "selector": "evidence_data[]",
+          "field": "evidence.matching.category_match",
+          "where": {
+            "all": [
+              {
+                "left": {
+                  "ref": "evidence.verification.is_valid"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "evidence.data.category"
+                },
+                "op": "exists"
+              }
+            ]
+          }
+        }
+      ],
+      "outcomes": [
+        {
+          "id": "category_fail_no_valid_evidence",
+          "status": "fail",
+          "risk_level": "high",
+          "issue_code": "no_valid_category_evidence",
+          "trigger_rule": "R6",
+          "when": {
+            "left": {
+              "ref": "metric.valid_category_evidence_count"
+            },
+            "op": "eq",
+            "right": 0
+          },
+          "explanation_template": "类型失败：没有有效类型证据。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "left": {
+                "ref": "evidence.data.category"
+              },
+              "op": "exists"
+            },
+            "min_items": 0,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "category_fail_low_match",
+          "status": "fail",
+          "risk_level": "high",
+          "issue_code": "category_match_below_threshold",
+          "trigger_rule": "R6",
+          "when": {
+            "left": {
+              "ref": "metric.best_match_score"
+            },
+            "op": "lt",
+            "right": 0.6
+          },
+          "explanation_template": "类型失败：所有有效类型证据与 record.category 的匹配度都低于 0.60。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "left": {
+                "ref": "evidence.data.category"
+              },
+              "op": "exists"
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "category_risk_single_strong_support",
+          "status": "risk",
+          "risk_level": "medium",
+          "issue_code": "single_strong_category_support",
+          "trigger_rule": "R6",
+          "when": {
+            "all": [
+              {
+                "left": {
+                  "ref": "metric.strong_support_count"
+                },
+                "op": "eq",
+                "right": 1
+              },
+              {
+                "left": {
+                  "ref": "metric.hard_conflict_count"
+                },
+                "op": "eq",
+                "right": 0
+              },
+              {
+                "left": {
+                  "ref": "metric.high_confidence_strong_support_count"
+                },
+                "op": "eq",
+                "right": 0
+              }
+            ]
+          },
+          "explanation_template": "类型风险：仅有 1 条强支持类型证据，且该证据置信度或匹配度不足以单独稳定支持 record.category。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "left": {
+                "ref": "evidence.data.category"
+              },
+              "op": "exists"
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "category_risk_medium_match",
+          "status": "risk",
+          "risk_level": "medium",
+          "issue_code": "medium_category_match",
+          "trigger_rule": "R6",
+          "when": {
+            "all": [
+              {
+                "left": {
+                  "ref": "metric.medium_support_count"
+                },
+                "op": "gte",
+                "right": 1
+              },
+              {
+                "left": {
+                  "ref": "metric.strong_support_count"
+                },
+                "op": "eq",
+                "right": 0
+              }
+            ]
+          },
+          "explanation_template": "类型风险：有效类型证据匹配度处于 0.60-0.84 区间。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "left": {
+                "ref": "evidence.data.category"
+              },
+              "op": "exists"
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "category_pass_multi_strong_support",
+          "status": "pass",
+          "risk_level": "none",
+          "issue_code": "category_supported",
+          "trigger_rule": "R6",
+          "when": {
+            "all": [
+              {
+                "left": {
+                  "ref": "metric.hard_conflict_count"
+                },
+                "op": "eq",
+                "right": 0
+              },
+              {
+                "any": [
+                  {
+                    "left": {
+                      "ref": "metric.strong_support_count"
+                    },
+                    "op": "gte",
+                    "right": 2
+                  },
+                  {
+                    "left": {
+                      "ref": "metric.high_confidence_strong_support_count"
+                    },
+                    "op": "gte",
+                    "right": 1
+                  }
+                ]
+              }
+            ]
+          },
+          "explanation_template": "类型通过：多条强支持类型证据共同支持，或单条高置信度强支持类型证据已足以稳定支持 record.category，且不存在硬冲突。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "left": {
+                "ref": "evidence.data.category"
+              },
+              "op": "exists"
+            },
+            "min_items": 1,
+            "max_items": 5
+          }
+        }
+      ]
+    },
+    "downgrade_consistency": {
+      "rule_id": "R7",
+      "title": "人工核实一致性检查",
+      "record_selector": "derived",
+      "evidence_selector": "evidence_data[]",
+      "evaluation": {
+        "order": ["fail", "risk", "pass"],
+        "mode": "first_match"
+      },
+      "metrics": [],
+      "outcomes": [
+        {
+          "id": "downgrade_fail_missed",
+          "status": "fail",
+          "risk_level": "high",
+          "issue_code": "missed_downgrade",
+          "trigger_rule": "R7",
+          "when": {
+            "all": [
+              {
+                "left": {
+                  "ref": "derived.qc_manual_review_required"
+                },
+                "op": "eq",
+                "right": true
+              },
+              {
+                "left": {
+                  "ref": "derived.upstream_manual_review_required"
+                },
+                "op": "eq",
+                "right": false
+              }
+            ]
+          },
+          "explanation_template": "降级一致性失败：QC 认为需要人工核实，但上游未降级。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "left": {
+                "ref": "evidence.verification.is_valid"
+              },
+              "op": "eq",
+              "right": true
+            },
+            "min_items": 0,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "downgrade_fail_unnecessary",
+          "status": "fail",
+          "risk_level": "high",
+          "issue_code": "unnecessary_downgrade",
+          "trigger_rule": "R7",
+          "when": {
+            "all": [
+              {
+                "left": {
+                  "ref": "derived.qc_manual_review_required"
+                },
+                "op": "eq",
+                "right": false
+              },
+              {
+                "left": {
+                  "ref": "derived.upstream_manual_review_required"
+                },
+                "op": "eq",
+                "right": true
+              }
+            ]
+          },
+          "explanation_template": "降级一致性失败：QC 认为无需人工核实，但上游执行了降级。",
+          "evidence_policy": {
+            "mode": "filter",
+            "selector": "evidence_data[]",
+            "where": {
+              "left": {
+                "ref": "evidence.verification.is_valid"
+              },
+              "op": "eq",
+              "right": true
+            },
+            "min_items": 0,
+            "max_items": 5
+          }
+        },
+        {
+          "id": "downgrade_risk_unresolved_signal",
+          "status": "risk",
+          "risk_level": "medium",
+          "issue_code": "unresolved_upstream_manual_review_signal",
+          "trigger_rule": "R7",
+          "when": {
+            "left": {
+              "ref": "derived.upstream_manual_review_signal_source"
+            },
+            "op": "eq",
+            "right": "unresolved"
+          },
+          "explanation_template": "降级一致性风险：无法从上游输入可靠推导人工核实信号。",
+          "evidence_policy": {
+            "mode": "none",
+            "selector": "evidence_data[]",
+            "min_items": 0,
+            "max_items": 0
+          }
+        },
+        {
+          "id": "downgrade_pass_consistent",
+          "status": "pass",
+          "risk_level": "none",
+          "issue_code": "consistent",
+          "trigger_rule": "R7",
+          "when": {
+            "left": {
+              "ref": "derived.qc_manual_review_required"
+            },
+            "op": "eq",
+            "right": {
+              "ref": "derived.upstream_manual_review_required"
+            }
+          },
+          "explanation_template": "降级一致性通过：QC 与上游对是否需要人工核实的判断一致。",
+          "evidence_policy": {
+            "mode": "none",
+            "selector": "evidence_data[]",
+            "min_items": 0,
+            "max_items": 0
+          }
+        }
+      ]
+    }
+  }
+}

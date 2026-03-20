@@ -1,0 +1,121 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "QC Summary Schema",
+  "description": "BigPOI verification QC summary schema v2.0.0",
+  "type": "object",
+  "properties": {
+    "task_id": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "string"
+    },
+    "qc_status": {
+      "type": "string",
+      "enum": ["qualified", "risky", "unqualified"]
+    },
+    "qc_score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "has_risk": {
+      "type": "boolean"
+    },
+    "explanation": {
+      "type": "string"
+    },
+    "dimension_results": {
+      "type": "object",
+      "required": ["existence", "name", "location", "address", "administrative", "category", "downgrade_consistency"],
+      "properties": {
+        "existence": {
+          "type": "string",
+          "enum": ["pass", "risk", "fail"]
+        },
+        "name": {
+          "type": "string",
+          "enum": ["pass", "risk", "fail"]
+        },
+        "location": {
+          "type": "string",
+          "enum": ["pass", "risk", "fail"]
+        },
+        "address": {
+          "type": "string",
+          "enum": ["pass", "risk", "fail"]
+        },
+        "administrative": {
+          "type": "string",
+          "enum": ["pass", "risk", "fail"]
+        },
+        "category": {
+          "type": "string",
+          "enum": ["pass", "risk", "fail"]
+        },
+        "downgrade_consistency": {
+          "type": "string",
+          "enum": ["pass", "risk", "fail"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "statistics_flags": {
+      "type": "object",
+      "required": [
+        "is_qualified",
+        "is_auto_approvable",
+        "is_manual_required",
+        "qc_manual_review_required",
+        "upstream_manual_review_required",
+        "downgrade_issue_type"
+      ],
+      "properties": {
+        "is_qualified": {
+          "type": "boolean"
+        },
+        "is_auto_approvable": {
+          "type": "boolean"
+        },
+        "is_manual_required": {
+          "type": "boolean"
+        },
+        "qc_manual_review_required": {
+          "type": "boolean"
+        },
+        "upstream_manual_review_required": {
+          "type": "boolean"
+        },
+        "downgrade_issue_type": {
+          "type": "string",
+          "enum": ["consistent", "missed_downgrade", "unnecessary_downgrade"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "downgrade_consistency": {
+      "type": "object",
+      "properties": {
+        "is_consistent": {
+          "type": "boolean"
+        },
+        "issue_type": {
+          "type": "string",
+          "enum": ["consistent", "missed_downgrade", "unnecessary_downgrade"]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "task_id",
+    "timestamp",
+    "qc_status",
+    "qc_score",
+    "has_risk",
+    "explanation",
+    "dimension_results",
+    "statistics_flags"
+  ],
+  "additionalProperties": false
+}

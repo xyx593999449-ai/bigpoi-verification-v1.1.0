@@ -1,0 +1,489 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Decision Tables DSL Schema",
+  "description": "Schema for deterministic BigPOI QC rule DSL.",
+  "type": "object",
+  "required": [
+    "version",
+    "dsl_version",
+    "authoritative",
+    "execution_model",
+    "workflow",
+    "integrity_check",
+    "source_priority_profiles",
+    "normalization_profiles",
+    "derived_fields",
+    "dimensions"
+  ],
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "dsl_version": {
+      "type": "string"
+    },
+    "authoritative": {
+      "type": "boolean"
+    },
+    "execution_model": {
+      "type": "string"
+    },
+    "workflow": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "integrity_check": {
+      "type": "object",
+      "required": [
+        "required_record_fields",
+        "required_evidence_fields",
+        "minimum_evidence_count",
+        "on_failure"
+      ],
+      "properties": {
+        "required_record_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "required_evidence_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "minimum_evidence_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "on_failure": {
+          "type": "object",
+          "required": ["dimension_status", "risk_level", "qc_status", "qc_score", "dimension_impacts"],
+          "properties": {
+            "dimension_status": {
+              "type": "string",
+              "enum": ["fail"]
+            },
+            "risk_level": {
+              "type": "string",
+              "enum": ["high"]
+            },
+            "qc_status": {
+              "type": "string",
+              "enum": ["unqualified"]
+            },
+            "qc_score": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "dimension_impacts": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["existence", "name", "location", "address", "administrative", "category", "downgrade_consistency"]
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "source_priority_profiles": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["match", "priority", "authoritative"],
+          "properties": {
+            "match": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "priority": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "authoritative": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "normalization_profiles": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["steps"],
+        "properties": {
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "function_catalog": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "returns", "description"],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "returns": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "derived_fields": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["boolean", "string", "number"]
+          },
+          "expression": {
+            "$ref": "#/definitions/condition"
+          },
+          "resolution_order": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "when", "value"],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "when": {
+                  "$ref": "#/definitions/condition"
+                },
+                "value": {
+                  "$ref": "#/definitions/value"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "default": {
+            "$ref": "#/definitions/value"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "dimensions": {
+      "type": "object",
+      "required": ["existence", "name", "location", "address", "administrative", "category", "downgrade_consistency"],
+      "properties": {
+        "existence": {
+          "$ref": "#/definitions/dimension"
+        },
+        "name": {
+          "$ref": "#/definitions/dimension"
+        },
+        "location": {
+          "$ref": "#/definitions/dimension"
+        },
+        "address": {
+          "$ref": "#/definitions/dimension"
+        },
+        "administrative": {
+          "$ref": "#/definitions/dimension"
+        },
+        "category": {
+          "$ref": "#/definitions/dimension"
+        },
+        "downgrade_consistency": {
+          "$ref": "#/definitions/dimension"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "value": {
+      "oneOf": [
+        {
+          "type": ["string", "number", "boolean", "null"]
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": ["string", "number", "boolean", "null"]
+          }
+        },
+        {
+          "type": "object",
+          "required": ["ref"],
+          "properties": {
+            "ref": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "comparison": {
+      "type": "object",
+      "required": ["left", "op"],
+      "properties": {
+        "left": {
+          "$ref": "#/definitions/value"
+        },
+        "op": {
+          "type": "string",
+          "enum": ["eq", "ne", "lt", "lte", "gt", "gte", "in", "not_in", "between", "exists"]
+        },
+        "right": {
+          "$ref": "#/definitions/value"
+        },
+        "lower": {
+          "$ref": "#/definitions/value"
+        },
+        "upper": {
+          "$ref": "#/definitions/value"
+        }
+      },
+      "additionalProperties": false
+    },
+    "condition": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["all"],
+          "properties": {
+            "all": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/definitions/condition"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["any"],
+          "properties": {
+            "any": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/definitions/condition"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["not"],
+          "properties": {
+            "not": {
+              "$ref": "#/definitions/condition"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "$ref": "#/definitions/comparison"
+        }
+      ]
+    },
+    "evaluation": {
+      "type": "object",
+      "required": ["order", "mode"],
+      "properties": {
+        "order": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "type": "string",
+            "enum": ["fail", "risk", "pass"]
+          }
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["first_match"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "metric": {
+      "type": "object",
+      "required": ["name", "function", "selector"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "function": {
+          "type": "string",
+          "enum": ["count", "avg", "max", "count_match_level", "max_match_level"]
+        },
+        "selector": {
+          "type": "string"
+        },
+        "field": {
+          "type": "string"
+        },
+        "where": {
+          "$ref": "#/definitions/condition"
+        },
+        "params": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    "evidence_policy": {
+      "type": "object",
+      "required": ["mode", "selector", "min_items", "max_items"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["filter", "none"]
+        },
+        "selector": {
+          "type": "string"
+        },
+        "where": {
+          "$ref": "#/definitions/condition"
+        },
+        "min_items": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_items": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "outcome": {
+      "type": "object",
+      "required": [
+        "id",
+        "status",
+        "risk_level",
+        "issue_code",
+        "trigger_rule",
+        "when",
+        "explanation_template",
+        "evidence_policy"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pass", "risk", "fail"]
+        },
+        "risk_level": {
+          "type": "string",
+          "enum": ["none", "low", "medium", "high"]
+        },
+        "issue_code": {
+          "type": "string"
+        },
+        "trigger_rule": {
+          "type": "string",
+          "enum": ["R1", "R2", "R3", "R4", "R5", "R6", "R7"]
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "explanation_template": {
+          "type": "string"
+        },
+        "evidence_policy": {
+          "$ref": "#/definitions/evidence_policy"
+        }
+      },
+      "additionalProperties": false
+    },
+    "dimension": {
+      "type": "object",
+      "required": [
+        "rule_id",
+        "title",
+        "record_selector",
+        "evidence_selector",
+        "evaluation",
+        "metrics",
+        "outcomes"
+      ],
+      "properties": {
+        "rule_id": {
+          "type": "string",
+          "enum": ["R1", "R2", "R3", "R4", "R5", "R6", "R7"]
+        },
+        "title": {
+          "type": "string"
+        },
+        "record_selector": {
+          "type": "string"
+        },
+        "evidence_selector": {
+          "type": "string"
+        },
+        "source_priority_profile": {
+          "type": "string"
+        },
+        "normalization_profile": {
+          "type": "string"
+        },
+        "evaluation": {
+          "$ref": "#/definitions/evaluation"
+        },
+        "metrics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/metric"
+          }
+        },
+        "outcomes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/outcome"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

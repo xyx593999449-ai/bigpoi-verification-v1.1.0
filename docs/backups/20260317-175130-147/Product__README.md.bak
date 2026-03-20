@@ -1,0 +1,92 @@
+# Product 域文档
+
+## 1. 域定位
+
+`Product/` 负责正式 BigPOI 核验链路，把 POI 输入推进为可校验、可追溯、可写库的正式结果包。
+
+## 2. 模块组成
+
+| 模块 | 作用 |
+|---|---|
+| `skills-bigpoi-verification/` | 主整合技能，负责运行上下文初始化、结果打包、结果校验 |
+| `evidence-collection/` | 证据采集、地图结果评审、采集结果合并、evidence 输出 |
+| `verification/` | 基于输入与 evidence 生成 decision |
+| `write-pg-verified/` | 把正式结果包回写到 PostgreSQL |
+
+## 3. 关键目录
+
+| 路径 | 说明 |
+|---|---|
+| `skills-bigpoi-verification/config/poi_type_mapping.yaml` | POI 类型映射 |
+| `skills-bigpoi-verification/schema/` | input / evidence / decision / record schema |
+| `evidence-collection/config/` | 通用采集配置与按类型拆分的证据源配置 |
+| `verification/config/` | 核验阈值、降级策略、类型映射 |
+| `write-pg-verified/config/db_config.yaml` | 正式回库数据库配置 |
+
+## 4. 正式脚本入口
+
+### 4.1 evidence-collection
+
+- `evidence-collection/scripts/build_web_source_plan.py`
+- `evidence-collection/scripts/call_internal_proxy.py`
+- `evidence-collection/scripts/call_map_vendor.py`
+- `evidence-collection/scripts/write_map_relevance_review.py`
+- `evidence-collection/scripts/merge_evidence_collection_outputs.py`
+- `evidence-collection/scripts/write_evidence_output.py`
+
+### 4.2 verification
+
+- `verification/scripts/write_decision_output.py`
+
+### 4.3 skills-bigpoi-verification
+
+- `skills-bigpoi-verification/scripts/init_run_context.py`
+- `skills-bigpoi-verification/scripts/write_result_bundle.py`
+- `skills-bigpoi-verification/scripts/validate_result_bundle.py`
+
+### 4.4 write-pg-verified
+
+- `write-pg-verified/SKILL.py`
+- `write-pg-verified/scripts/data_converter.py`
+- `write-pg-verified/scripts/db_writer.py`
+- `write-pg-verified/scripts/file_loader.py`
+
+## 5. 主流程
+
+```mermaid
+flowchart TD
+    A["input.json"] --> B["init_run_context.py"]
+    B --> C["evidence-collection"]
+    C --> D["write_evidence_output.py"]
+    D --> E["verification/write_decision_output.py"]
+    E --> F["write_result_bundle.py"]
+    F --> G["validate_result_bundle.py"]
+    G --> H["write-pg-verified"]
+```
+
+## 6. 输出约定
+
+- 正式结果目录：`output/results/{task_id}/`
+- 运行隔离目录：`output/runs/{run_id}/process/` 与 `output/runs/{run_id}/staging/`
+- 正式结果文件：
+  - `evidence_<timestamp>.json`
+  - `decision_<timestamp>.json`
+  - `record_<timestamp>.json`
+  - `index_<timestamp>.json`
+
+## 7. 执行顺序建议
+
+1. 准备输入 POI 与工作目录。
+2. 用 `init_run_context.py` 初始化 `run_id` 与运行目录。
+3. 执行 `evidence-collection` 生成 `evidence_*.json`。
+4. 执行 `verification` 生成 `decision_*.json`。
+5. 执行 `write_result_bundle.py` 生成 `record` 与 `index`。
+6. 执行 `validate_result_bundle.py` 做结构校验。
+7. 需要回库时执行 `write-pg-verified`。
+
+## 8. 维护要求
+
+- Product 域变更优先更新本文件和 `Product/CHANGELOG.md`。
+- 涉及 schema、阈值、回库映射变更时，同时更新对应技能 README / SKILL。
+- 新增文档前先备份旧版本到 `docs/backups/`。
+

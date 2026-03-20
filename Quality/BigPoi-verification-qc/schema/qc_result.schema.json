@@ -1,0 +1,329 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "QC Result Schema",
+  "description": "BigPOI verification QC result schema v2.0.0",
+  "type": "object",
+  "properties": {
+    "task_id": {
+      "type": "string"
+    },
+    "qc_status": {
+      "type": "string",
+      "enum": ["qualified", "risky", "unqualified"]
+    },
+    "qc_score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "固定100分制，由 config/scoring_policy.json 反算"
+    },
+    "has_risk": {
+      "type": "boolean"
+    },
+    "risk_dims": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["existence", "name", "location", "address", "administrative", "category", "downgrade_consistency"]
+      }
+    },
+    "triggered_rules": {
+      "$ref": "./triggered_rules.schema.json"
+    },
+    "dimension_results": {
+      "type": "object",
+      "required": ["existence", "name", "location", "address", "administrative", "category", "downgrade_consistency"],
+      "properties": {
+        "existence": {
+          "$ref": "#/definitions/core_dimension_result"
+        },
+        "name": {
+          "$ref": "#/definitions/core_dimension_result"
+        },
+        "location": {
+          "$ref": "#/definitions/core_dimension_result"
+        },
+        "address": {
+          "$ref": "#/definitions/core_dimension_result"
+        },
+        "administrative": {
+          "$ref": "#/definitions/core_dimension_result"
+        },
+        "category": {
+          "$ref": "#/definitions/core_dimension_result"
+        },
+        "downgrade_consistency": {
+          "$ref": "#/definitions/downgrade_consistency_result"
+        }
+      },
+      "additionalProperties": false
+    },
+    "explanation": {
+      "type": "string"
+    },
+    "statistics_flags": {
+      "type": "object",
+      "required": [
+        "is_qualified",
+        "is_auto_approvable",
+        "is_manual_required",
+        "qc_manual_review_required",
+        "upstream_manual_review_required",
+        "downgrade_issue_type"
+      ],
+      "properties": {
+        "is_qualified": {
+          "type": "boolean"
+        },
+        "is_auto_approvable": {
+          "type": "boolean"
+        },
+        "is_manual_required": {
+          "type": "boolean"
+        },
+        "qc_manual_review_required": {
+          "type": "boolean"
+        },
+        "upstream_manual_review_required": {
+          "type": "boolean"
+        },
+        "downgrade_issue_type": {
+          "type": "string",
+          "enum": ["consistent", "missed_downgrade", "unnecessary_downgrade"]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "task_id",
+    "qc_status",
+    "qc_score",
+    "has_risk",
+    "risk_dims",
+    "triggered_rules",
+    "dimension_results",
+    "explanation",
+    "statistics_flags"
+  ],
+  "additionalProperties": false,
+  "definitions": {
+    "core_dimension_result": {
+      "type": "object",
+      "required": ["status", "risk_level", "explanation", "evidence"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["pass", "risk", "fail"]
+        },
+        "risk_level": {
+          "type": "string",
+          "enum": ["none", "low", "medium", "high"]
+        },
+        "explanation": {
+          "type": "string"
+        },
+        "related_rules": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["R1", "R2", "R3", "R4", "R5", "R6", "R7"]
+          }
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/evidence_item"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "downgrade_consistency_result": {
+      "type": "object",
+      "required": [
+        "status",
+        "risk_level",
+        "explanation",
+        "is_consistent",
+        "issue_type",
+        "qc_manual_review_required",
+        "upstream_manual_review_required",
+        "evidence"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["pass", "risk", "fail"]
+        },
+        "risk_level": {
+          "type": "string",
+          "enum": ["none", "low", "medium", "high"]
+        },
+        "explanation": {
+          "type": "string"
+        },
+        "is_consistent": {
+          "type": "boolean"
+        },
+        "issue_type": {
+          "type": "string",
+          "enum": ["consistent", "missed_downgrade", "unnecessary_downgrade"]
+        },
+        "qc_manual_review_required": {
+          "type": "boolean"
+        },
+        "upstream_manual_review_required": {
+          "type": "boolean"
+        },
+        "related_rules": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["R7"]
+          }
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "evidence_item": {
+      "type": "object",
+      "properties": {
+        "evidence_id": {
+          "type": "string"
+        },
+        "source": {
+          "type": "object",
+          "properties": {
+            "source_id": {
+              "type": "string"
+            },
+            "source_name": {
+              "type": "string"
+            },
+            "source_type": {
+              "type": "string"
+            },
+            "source_url": {
+              "type": "string"
+            },
+            "weight": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": true
+        },
+        "collected_at": {
+          "type": "string"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "location": {
+              "type": "object",
+              "properties": {
+                "longitude": {
+                  "type": "number"
+                },
+                "latitude": {
+                  "type": "number"
+                },
+                "address": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "category": {
+              "type": "string"
+            },
+            "administrative": {
+              "type": "object",
+              "properties": {
+                "province": {
+                  "type": "string"
+                },
+                "city": {
+                  "type": "string"
+                },
+                "district": {
+                  "type": "string"
+                },
+                "street": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "existence": {
+              "type": "boolean"
+            },
+            "raw_data": {
+              "type": "object"
+            }
+          },
+          "additionalProperties": true
+        },
+        "verification": {
+          "type": "object",
+          "properties": {
+            "is_valid": {
+              "type": "boolean"
+            },
+            "validation_errors": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "confidence": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": true
+        },
+        "matching": {
+          "type": "object",
+          "properties": {
+            "name_similarity": {
+              "type": "number"
+            },
+            "location_distance": {
+              "type": "number"
+            },
+            "category_match": {
+              "type": "number"
+            },
+            "is_match": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": true
+        },
+        "metadata": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

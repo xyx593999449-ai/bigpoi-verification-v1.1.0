@@ -1,0 +1,13 @@
+# PostgreSQL 数据库连接配置
+# 注意：生产环境中应使用环境变量或密钥管理服务，不要将密码硬编码在文件中
+
+host: 10.82.232.122
+port: 5432
+database: big_poi
+user: appdeploy
+password: ywIu5IFAQrHqsnb
+
+# 连接池配置（可选）
+min_connections: 1
+max_connections: 10
+connection_timeout: 30
