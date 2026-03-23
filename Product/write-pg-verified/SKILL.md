@@ -1,27 +1,27 @@
 ---
 name: write-pg-verified
-description: 娴犲簼绗傚〒鍛婂Η閼崇晫鏁撻幋鎰畱閺堫剙婀?JSON 閺傚洣娆㈡稉顓☆嚢閸欐牕銇?POI 閺嶇鐤勭紒鎾寸亯楠炶泛娲栭崘?PostgreSQL 閹存劖鐏夌悰銊ｂ偓鍌滄暏娴滃孩澧界悰灞芥礀鎼存挶鈧礁婀禒鍛絹娓?task_id 閸?search_directory 閺冩儼鍤滈崝銊︾叀閹靛墽鍌ㄥ鏇熸瀮娴犺绱濇禒銉ュ挤閸︺劑娓剁憰浣规闁俺绻?init 閸?verified 閸欏倹鏆熺憰鍡欐磰閸樼喎顫愮悰銊ょ瑢閺嶇鐤勯幋鎰亯鐞涖劌鎮曢敍娑橆洤閺嬫粌鎮撴稉鈧?task_id 閸ョ姾鐨熸惔锕傚櫢鐠囨洑楠囬悽鐔奉樋娑?index 閺傚洣娆㈤敍宀冨殰閸斻劍瀵滈張鈧弬鐗堟闂傚瓨鍩戦柅澶嬪閺堚偓閺傛壆绮ㄩ弸婧库偓?
+description: 从上游技能生成的本地 JSON 文件中读取大 POI 核实结果并回写 PostgreSQL 成果表。用于执行回库、在仅提供 task_id 和 search_directory 时自动查找索引文件，以及在需要时通过 init 和 verified 参数覆盖原始表与核实成果表名；如果同一 task_id 因调度重试产生多个 index 文件，自动按最新时间戳选择最新结果。
 ---
 
 # write-pg-verified
 
-鐏忓棔绗傚〒鍛婄壋鐎圭偞濡ч懗鎴掗獓閸戣櫣娈?`index.json`閵嗕梗decision`閵嗕梗evidence`閵嗕梗record` 缁涘鏋冩禒璺哄鏉炶棄鎮楅敍灞藉晸閸?PostgreSQL 閻ㄥ嫭鐗崇€圭偞鍨氶弸婊嗐€冮敍灞借嫙閸氬本顒為弴瀛樻煀閸樼喎顫愮悰銊ф畱 `verify_status` 娑撹　鈧粌鍑￠弽绋跨杽閳ユ縿鈧?
+将上游核实技能产出的 `index.json`、`decision`、`evidence`、`record` 等文件加载后，写入 PostgreSQL 的核实成果表，并同步更新原始表的 `verify_status` 为“已核实”。
 
-## 瀹搞儰缍斿ù?
+## 工作流
 
-1. 娴兼ê鍘涢幒銉︽暪 `task_id + search_directory`閿涘矁鍤滈崝銊ユ躬閻╊喖缍嶆稉瀣偓鎺戠秺閺屻儲澹橀崠褰掑帳閻?index 閺傚洣娆㈤妴?
-2. 鐎佃鐦℃稉顏勨偓娆撯偓?index 鐠囪褰囬弬鍥︽閸愬懎顔愰敍灞剧墡妤犲苯鍙炬稉顓犳畱 `task_id` 娑撳骸鍙嗛崣鍌欑閼锋番鈧?
-3. 婵″倹鐏夐崥灞肩娑?`task_id` 閸涙垝鑵戞径姘嚋 index 閺傚洣娆㈤敍灞惧瘻閺傚洣娆㈤張鈧崥搴濇叏閺€瑙勬闂傛挳鈧瀚ㄩ張鈧弬鎵畱娑撯偓娑擃亷绱濋柆鍨帳鐠嬪啫瀹抽柌宥堢槸閸氬簼绮涚拠顖滄暏閺冄呯波閺嬫嚎鈧?
-4. 娴犲酣鈧鑵戦惃?index 閸旂姾娴?`decision`閵嗕梗evidence`閵嗕梗record` 缁涘鍙ч懕鏃€鏋冩禒韬测偓?
-5. 鏉烆剚宕茬€涙顔岄崥搴″晸閸?`verified` 閹稿洤鐣鹃惃鍕灇閺嬫粏銆冮敍灞借嫙閺囧瓨鏌?`init` 閹稿洤鐣鹃惃鍕斧婵銆冮妴?
+1. 优先接收 `task_id + search_directory`，自动在目录下递归查找匹配的 index 文件。
+2. 对每个候选 index 读取文件内容，校验其中的 `task_id` 与入参一致。
+3. 如果同一个 `task_id` 命中多个 index 文件，按文件最后修改时间选择最新的一个，避免调度重试后仍误用旧结果。
+4. 从选中的 index 加载 `decision`、`evidence`、`record` 等关联文件。
+5. 转换字段后写入 `verified` 指定的成果表，并更新 `init` 指定的原始表。
 
-## 鏉堟挸鍙嗛弬鐟扮础
+## 输入方式
 
-姒涙顓荤悰銊ユ倳閿?
+默认表名：
 - `init = "poi_init"`
 - `verified = "poi_verified"`
 
-閹恒劏宕橀弬鐟扮础閿?
+推荐方式：
 
 ```python
 from SKILL import execute
@@ -36,7 +36,7 @@ result = execute(
 )
 ```
 
-娑旂喎褰叉禒銉ф纯閹恒儲鏂佹潻?data閿?
+也可以直接放进 data：
 
 ```python
 from SKILL import execute
@@ -49,7 +49,7 @@ result = execute({
 })
 ```
 
-閸忕厧顔愰弬鐟扮础閿?
+兼容方式：
 
 ```python
 from SKILL import execute
@@ -62,7 +62,7 @@ result = execute({
 })
 ```
 
-閹靛綊鍣洪弬鐟扮础閿?
+批量方式：
 
 ```python
 from SKILL import execute_batch
@@ -73,8 +73,11 @@ results = execute_batch(
     init="poi_init",
     verified="poi_verified"
 )
+```
 
-娑撳﹥鐖堕幎鈧懗钘夌安閻㈢喐鍨氱猾璁虫妧缂佹挻鐎敍?
+## 索引文件要求
+
+上游技能应生成类似结构：
 
 ```json
 {
@@ -87,10 +90,10 @@ results = execute_batch(
   },
   "poi_data": {
     "id": "POI_12345",
-    "name": "閸栨ぞ鍚径褍顒熺粭顑跨閸栧娅?,
+    "name": "北京大学第一医院",
     "poi_type": "090101",
-    "address": "閸栨ぞ鍚敮鍌濄偪閸╁骸灏憲澶哥矆鎼存挸銇囩悰?閸?,
-    "city": "閸栨ぞ鍚敮?,
+    "address": "北京市西城区西什库大街8号",
+    "city": "北京市",
     "city_adcode": "110102",
     "x_coord": 116.3723,
     "y_coord": 39.9342
@@ -98,58 +101,61 @@ results = execute_batch(
 }
 ```
 
-韫囧懘娓剁€涙顔岄敍?
+必需字段：
 - `task_id`
 - `poi_id`
 - `files.decision`
 - `poi_data`
 
-## 婢?index 闁瀚ㄧ憴鍕灟
+## 多 index 选择规则
 
-瑜版挷濞囬悽?`task_id + search_directory` 濡€崇础閺冭绱?
+当使用 `task_id + search_directory` 模式时：
 
-- 闁帒缍婇崠褰掑帳閸欘垵鍏橀惃?`index*.json`閿涘苯鑻熺憰鍡欐磰 Linux 娑撳顩?`.claude` 鏉╂瑧琚梾鎰閻╊喖缍嶆稉顓犳畱閸婃瑩鈧鏋冩禒?
-- 閸欘亙绻氶悾娆愭瀮娴犺泛鍞寸€瑰綊鍣?`task_id` 娑撯偓閼峰娈戦崐娆撯偓?
-- 婵″倹鐏夐張澶婎樋娑擃亜鈧瑩鈧绱濋幐澶嬫瀮娴犺埖娓堕崥搴濇叏閺€瑙勬闂傛挳妾锋惔蹇斿笓鎼?
-- 娴ｈ法鏁ら張鈧弬鎵畱闁絼閲?index 缂佈呯敾閸ョ偛绨?
+- 递归匹配可能的 `index*.json`，并覆盖 Linux 下如 `.claude` 这类隐藏目录中的候选文件
+- 只保留文件内容里 `task_id` 一致的候选
+- 如果有多个候选，按文件最后修改时间降序排序
+- 使用最新的那个 index 继续回库
 
-## 鐞涖劌鎮曢崣鍌涙殶
+## 表名参数
 
-- `init`閿涙艾甯慨瀣€冮崥宥忕礉姒涙顓?`poi_init`
-- `verified`閿涙碍鐗崇€圭偞鍨氶弸婊嗐€冮崥宥忕礉姒涙顓?`poi_verified`
-- 閸忎浇顔忔导鐘猴紭鐞涖劌鎮曢敍灞肩瘍閸忎浇顔忔导鐘茬敨 schema 閻ㄥ嫬鑸板蹇ョ礉娓氬顩?`public.poi_init`
-- 鐞涖劌鎮曟导姘粵閺嶅洩鐦戠粭锔界墡妤犲苯鎮楅崘宥嗗閸?SQL閿涘矂浼╅崗宥囨纯閹恒儱鐡х粭锔胯閹峰吋甯?
+- `init`：原始表名，默认 `poi_init`
+- `verified`：核实成果表名，默认 `poi_verified`
+- 允许传裸表名，也允许传带 schema 的形式，例如 `public.poi_init`
+- 表名会做标识符校验后再拼入 SQL，避免直接字符串拼接
 
-## 閸涙垝鎶ょ悰?
+## 命令行
+
 ```bash
 python SKILL.py <task_id> <search_directory>
 python SKILL.py <index_file_path>
-python SKILL.py --task-id <task_id> --search-directory <search_directory> [--init <init_table>] [--verified <verified_table>]
-python SKILL.py --index-file <index_file_path> [--task-id <task_id>] [--init <init_table>] [--verified <verified_table>]
 ```
-- 主入口 CLI 支持 `--init` 与 `--verified`，可覆盖默认表名。
+
+## 目录结构
 
 ```text
 write-pg-verified/
-閳规壕鏀㈤埞鈧?SKILL.md
-閳规壕鏀㈤埞鈧?SKILL.py
-閳规壕鏀㈤埞鈧?config/
-閳?  閳规柡鏀㈤埞鈧?db_config.yaml
-閳规柡鏀㈤埞鈧?scripts/
-    閳规壕鏀㈤埞鈧?__init__.py
-    閳规壕鏀㈤埞鈧?file_loader.py
-    閳规壕鏀㈤埞鈧?data_converter.py
-    閳规壕鏀㈤埞鈧?db_writer.py
-    閳规柡鏀㈤埞鈧?logger_config.py
+├── SKILL.md
+├── SKILL.py
+├── config/
+│   └── db_config.yaml
+└── scripts/
+    ├── __init__.py
+    ├── file_loader.py
+    ├── data_converter.py
+    ├── db_writer.py
+    └── logger_config.py
+```
 
-- 閹恒劏宕樻导妯哄帥娴ｈ法鏁?`task_id + search_directory`閿涘矁顔€閹垛偓閼冲€熷殰瀹稿崬鐣幋?index 閸欐垹骞囨稉搴ㄥ櫢鐠囨洜绮ㄩ弸婊冨幑鎼存洏鈧?
-- 婵″倹鐏夋担鐘插嚒缂佸繑妲戠涵顔剧叀闁捁顩﹂崘娆忔礀閸濐亙绔存禒鐣岀波閺嬫粣绱濋崣顖欎簰閻╁瓨甯存导?`index_file`閿涘本顒濋弮鏈电瑝娴兼艾寮稉搴樷偓婊勬付閺?index閳ユ繈鈧瀚ㄩ妴?
-- 閹垛偓閼虫垝绻氶幐浣哥畵缁涘绱癭verified` 鐞涖劌鍑＄€涙ê婀惄绋挎倱 `task_id` 閺冭绱濇稉宥夊櫢婢跺秵褰冮崗銉礉娴ｅ棔绮涙导姘纯閺?`init` 鐞涖劎濮搁幀浣碘偓?
-- 閺冦儱绻旀导姘愁唶瑜版洖鈧瑩鈧?index 閺佷即鍣洪妴浣规付缂佸牆鎳℃稉顓犳畱閺堚偓閺傜増鏋冩禒璁圭礉娴犮儱寮烽張顒侇偧鐎圭偤妾崘娆忓弳閻ㄥ嫯銆冮崥宥忕礉娓氬じ绨幒鎺撶叀闂傤噣顣介妴淇橮ath.rglob(...)` 闁帒缍婇弻銉﹀閸欘垵顩惄?Linux 娑?`.claude` 缁涘娈ｉ挊蹇曟窗瑜版洏鈧?
+## 注意事项
 
-## 閸ョ偛绨辩€涙顔岄弶銉︾爱缁撅附娼?
+- 推荐优先使用 `task_id + search_directory`，让技能自己完成 index 发现与重试结果兜底。
+- 如果你已经明确知道要写回哪一份结果，可以直接传 `index_file`，此时不会参与“最新 index”选择。
+- 技能保持幂等：`verified` 表已存在相同 `task_id` 时，不重复插入，但仍会更新 `init` 表状态。
+- 日志会记录候选 index 数量、最终命中的最新文件，以及本次实际写入的表名，便于排查问题。`Path.rglob(...)` 递归查找可覆盖 Linux 下 `.claude` 等隐藏目录。
 
-- `verification_notes` 娴犲懏娼甸懛?`decision.overall.summary`閿涘矁顩﹀Ч鍌欑瑐濞撳憡褰佹笟娑毲旂€规氨娈戞稉顓熸瀮閹芥顩﹂妴?
-- `changes_made` 娴兼ê鍘涙担璺ㄦ暏 `record.verification_result.changes`閿涘奔绗夐崘宥囨纯閹恒儰绶风挧鏍殰閻㈣鲸鐗稿蹇曟畱 `decision.corrections`閵?
-- 閹存劖鐏夌悰銊よ厬閻?`name`閵嗕梗x_coord`閵嗕梗y_coord`閵嗕梗poi_type`閵嗕梗address`閵嗕梗city`閵嗕梗city_adcode` 閸у洣浜?`record.verification_result.final_values` 娑撳搫鍣妴?
-- 婵″倹鐏?`record.verification_result.final_values` 閺堫亝顒滅涵顔荤秼閻滅増鐗崇€圭偛鎮楅惃鍕付缂佸牆鈧》绱濇惔鏃囶潒娑撹桨绗傚〒鍝ョ波閺嬫粈绗夐崥鍫熺壐閿涘瞼顩﹀銏犳礀鎼存挶鈧?
+## 回库字段来源约束
+
+- `verification_notes` 仅来自 `decision.overall.summary`，要求上游提供稳定的中文摘要。
+- `changes_made` 优先使用 `record.verification_result.changes`，不再直接依赖自由格式的 `decision.corrections`。
+- 成果表中的 `name`、`x_coord`、`y_coord`、`poi_type`、`address`、`city`、`city_adcode` 均以 `record.verification_result.final_values` 为准。
+- 如果 `record.verification_result.final_values` 未正确体现核实后的最终值，应视为上游结果不合格，禁止回库。

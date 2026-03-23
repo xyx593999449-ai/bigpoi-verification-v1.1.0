@@ -50,7 +50,6 @@
 - `write-pg-verified/scripts/data_converter.py`
 - `write-pg-verified/scripts/db_writer.py`
 - `write-pg-verified/scripts/file_loader.py`
-- `write-pg-verified/SKILL.py` 的 CLI 支持 `--init` / `--verified` 覆盖原始表与成果表名
 
 ## 5. 主流程
 
