@@ -1,33 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-大POI核实结果回库技能 - 入口文件
+write-pg-verified 技能入口。
 
 功能：
-从上游技能生成的本地 JSON 文件读取核实结果，
-批量回写到 PostgreSQL 的核实成果表，
-同时更新原始表状态为“已核实”。
-
-输入模式：
-通过 task_id 和 search_directory 参数自动查找索引文件并执行回库。
-如果同一个 task_id 因重试产生多个 index 文件，则优先使用最新修改时间的文件。
-
-可选参数：
-- init: 原始表名，默认 poi_init
-- verified: 核实成果表名，默认 poi_verified
+1. 根据 task_id + search_directory 或 index_file 定位结果索引文件。
+2. 将 index 关联的 decision / evidence / record 结果写入 PostgreSQL。
+3. 支持通过 init / verified 覆盖原始表与成果表名。
 """
 
+import argparse
 import io
 import json
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-# 设置 UTF-8 编码输出
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
-# 添加 scripts 目录到路径
 sys.path.insert(0, str(Path(__file__).parent / "scripts"))
 
 from db_writer import VerifiedResultWriter
@@ -37,10 +28,10 @@ logger = get_logger(__name__)
 
 
 def find_index_file_by_task_id(task_id: str, search_directory: str) -> Optional[str]:
-    """在指定搜索目录下查找包含指定 task_id 的索引文件。"""
+    """在指定目录递归搜索并返回最新的 task_id 对应 index 文件。"""
     search_dir = Path(search_directory)
     if not search_dir.exists():
-        logger.error(f"搜索目录不存在: {search_directory}")
+        logger.error("搜索目录不存在: %s", search_directory)
         return None
 
     candidate_files = [
@@ -68,19 +59,19 @@ def find_index_file_by_task_id(task_id: str, search_directory: str) -> Optional[
             modified_time = index_file.stat().st_mtime
             matched_index_files.append((modified_time, normalized_path))
         except (json.JSONDecodeError, IOError) as e:
-            logger.warning(f"无法读取索引文件 {index_file}: {e}")
+            logger.warning("无法读取索引文件 %s: %s", index_file, e)
         except OSError as e:
-            logger.warning(f"无法获取索引文件时间戳 {index_file}: {e}")
+            logger.warning("无法获取索引文件时间戳 %s: %s", index_file, e)
 
     if not matched_index_files:
-        logger.warning(f"未找到 task_id={task_id} 的索引文件")
+        logger.warning("未找到 task_id=%s 的索引文件", task_id)
         return None
 
     matched_index_files.sort(key=lambda item: item[0], reverse=True)
     latest_mtime, latest_index_file = matched_index_files[0]
 
     logger.info(
-        "找到 %s 个匹配的索引文件，按最后修改时间选择最新文件: %s (mtime=%s)",
+        "找到 %s 个匹配索引，选择最新文件: %s (mtime=%s)",
         len(matched_index_files),
         latest_index_file,
         latest_mtime,
@@ -94,12 +85,9 @@ def execute(
     verified: Optional[str] = None,
     **kwargs,
 ) -> Dict[str, Any]:
-    """执行单条 POI 核实结果写入。"""
+    """执行单条回库。"""
     if data is None:
-        return {
-            "success": False,
-            "error": "缺少必要的输入数据",
-        }
+        return {"success": False, "error": "缺少必要的输入数据"}
 
     if init is not None:
         data["init"] = init
@@ -107,10 +95,7 @@ def execute(
         data["verified"] = verified
 
     if "task_id" not in data:
-        return {
-            "success": False,
-            "error": "缺少必需字段: task_id",
-        }
+        return {"success": False, "error": "缺少必填字段: task_id"}
 
     task_id = data["task_id"]
     index_file = None
@@ -126,14 +111,14 @@ def execute(
             }
     elif "index_file" in data:
         index_file = data["index_file"]
-        logger.info("使用指定的索引文件: %s", index_file)
+        logger.info("使用指定索引文件: %s", index_file)
     else:
         return {
             "success": False,
-            "error": "缺少必需字段: search_directory 或 index_file（至少提供一个）",
+            "error": "缺少必填字段: search_directory 或 index_file（至少提供一个）",
         }
 
-    write_data = {
+    write_data: Dict[str, Any] = {
         "task_id": task_id,
         "index_file": index_file,
     }
@@ -145,25 +130,17 @@ def execute(
     writer = None
     try:
         logger.info("开始执行单条写入: task_id=%s", task_id)
-
         writer = VerifiedResultWriter()
         writer.connect()
-
         result = writer.write(write_data)
         logger.info("写入完成: success=%s", result.get("success"))
         return result
     except ValueError as e:
-        logger.error("输入数据验证失败: %s", e)
-        return {
-            "success": False,
-            "error": f"输入数据验证失败: {str(e)}",
-        }
+        logger.error("输入数据校验失败: %s", e)
+        return {"success": False, "error": f"输入数据校验失败: {str(e)}"}
     except Exception as e:
         logger.error("执行失败: %s", e)
-        return {
-            "success": False,
-            "error": str(e),
-        }
+        return {"success": False, "error": str(e)}
     finally:
         if writer:
             writer.close()
@@ -176,12 +153,9 @@ def execute_batch(
     verified: Optional[str] = None,
     **kwargs,
 ) -> Dict[str, Any]:
-    """批量执行 POI 核实结果写入。"""
+    """批量执行回库。"""
     if data_list is None or not isinstance(data_list, list):
-        return {
-            "success": False,
-            "error": "输入必须是 POI 数据列表",
-        }
+        return {"success": False, "error": "输入必须是 POI 数据列表"}
 
     if len(data_list) == 0:
         return {
@@ -199,39 +173,28 @@ def execute_batch(
                 "success": False,
                 "error": "使用任务 ID 列表时，必须提供 search_directory 参数",
             }
-        data_list = [
-            {"task_id": task_id, "search_directory": search_directory}
-            for task_id in data_list
-        ]
+        data_list = [{"task_id": task_id, "search_directory": search_directory} for task_id in data_list]
 
     for idx, item in enumerate(data_list):
         if not isinstance(item, dict):
-            return {
-                "success": False,
-                "error": f"第 {idx} 个元素必须是字典类型",
-            }
+            return {"success": False, "error": f"第 {idx} 个元素必须是字典类型"}
         if "task_id" not in item:
-            return {
-                "success": False,
-                "error": f"第 {idx} 个元素缺少必需字段: task_id",
-            }
+            return {"success": False, "error": f"第 {idx} 个元素缺少必填字段: task_id"}
         if "search_directory" not in item and "index_file" not in item:
             return {
                 "success": False,
-                "error": f"第 {idx} 个元素缺少必需字段: search_directory 或 index_file（至少提供一个）",
+                "error": f"第 {idx} 个元素缺少必填字段: search_directory 或 index_file（至少提供一个）",
             }
 
     writer = None
     try:
         logger.info("开始执行批量写入: total=%s", len(data_list))
-
         writer = VerifiedResultWriter()
         writer.connect()
 
         write_data_list = []
         for item in data_list:
             task_id = item["task_id"]
-
             if "search_directory" in item:
                 index_file = find_index_file_by_task_id(task_id, item["search_directory"])
                 if index_file is None:
@@ -240,15 +203,11 @@ def execute_batch(
             else:
                 index_file = item["index_file"]
 
-            write_item = {
-                "task_id": task_id,
-                "index_file": index_file,
-            }
+            write_item: Dict[str, Any] = {"task_id": task_id, "index_file": index_file}
             if item.get("init") or init:
                 write_item["init"] = item.get("init") or init
             if item.get("verified") or verified:
                 write_item["verified"] = item.get("verified") or verified
-
             write_data_list.append(write_item)
 
         result = writer.write_batch(write_data_list)
@@ -262,10 +221,7 @@ def execute_batch(
         return result
     except Exception as e:
         logger.error("批量执行失败: %s", e)
-        return {
-            "success": False,
-            "error": str(e),
-        }
+        return {"success": False, "error": str(e)}
     finally:
         if writer:
             writer.close()
@@ -276,29 +232,61 @@ def main(data: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
     return execute(data, **kwargs)
 
 
+def _parse_cli_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="write-pg-verified 回库入口",
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    parser.add_argument("first", nargs="?", help="兼容参数1：task_id 或 index_file")
+    parser.add_argument("second", nargs="?", help="兼容参数2：search_directory")
+    parser.add_argument("--task-id", dest="task_id", help="任务ID")
+    parser.add_argument("--search-directory", dest="search_directory", help="搜索目录")
+    parser.add_argument("--index-file", dest="index_file", help="索引文件路径")
+    parser.add_argument("--init", dest="init_table", help="原始表名，默认 poi_init")
+    parser.add_argument("--verified", dest="verified_table", help="成果表名，默认 poi_verified")
+    return parser.parse_args()
+
+
+def _build_cli_data(args: argparse.Namespace) -> Optional[Dict[str, Any]]:
+    if args.index_file:
+        return {
+            "task_id": args.task_id or Path(args.index_file).stem.replace("index_", ""),
+            "index_file": args.index_file,
+        }
+
+    if args.task_id and args.search_directory:
+        return {
+            "task_id": args.task_id,
+            "search_directory": args.search_directory,
+        }
+
+    if args.first and args.second:
+        return {
+            "task_id": args.first,
+            "search_directory": args.second,
+        }
+
+    if args.first and not args.second:
+        return {
+            "task_id": args.task_id or Path(args.first).stem.replace("index_", ""),
+            "index_file": args.first,
+        }
+
+    return None
+
+
 if __name__ == "__main__":
-    if len(sys.argv) == 3:
-        task_id, search_dir = sys.argv[1], sys.argv[2]
-        test_data = {
-            "task_id": task_id,
-            "search_directory": search_dir,
-        }
-        result = execute(test_data)
-        print("\n=== 执行结果 ===")
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-    elif len(sys.argv) == 2:
-        index_file = sys.argv[1]
-        test_data = {
-            "task_id": Path(index_file).stem.replace("index_", ""),
-            "index_file": index_file,
-        }
-        result = execute(test_data)
-        print("\n=== 执行结果 ===")
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-    else:
+    args = _parse_cli_args()
+    test_data = _build_cli_data(args)
+
+    if test_data is None:
         print("用法:")
-        print("  模式1（推荐）: python SKILL.py <task_id> <search_directory>")
-        print("  模式2（兼容）: python SKILL.py <index_file_path>")
-        print("\n示例:")
-        print("  python SKILL.py TASK_20260227_001 output/results")
-        print("  python SKILL.py output/results/TASK_20260227_001/index.json")
+        print("  兼容模式1: python SKILL.py <task_id> <search_directory>")
+        print("  兼容模式2: python SKILL.py <index_file_path>")
+        print("  推荐模式1: python SKILL.py --task-id <task_id> --search-directory <dir> [--init <table>] [--verified <table>]")
+        print("  推荐模式2: python SKILL.py --index-file <path> [--task-id <task_id>] [--init <table>] [--verified <table>]")
+        sys.exit(1)
+
+    result = execute(test_data, init=args.init_table, verified=args.verified_table)
+    print("\n=== 执行结果 ===")
+    print(json.dumps(result, ensure_ascii=False, indent=2))
