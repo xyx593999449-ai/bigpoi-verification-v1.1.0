@@ -50,6 +50,7 @@
 - `write-pg-verified/scripts/data_converter.py`
 - `write-pg-verified/scripts/db_writer.py`
 - `write-pg-verified/scripts/file_loader.py`
+- `write-pg-verified/SKILL.py` supports CLI table overrides via `--init` and `--verified`.
 
 ## 5. 主流程
 

@@ -17,6 +17,7 @@
 - verified: 核实成果表名，默认 poi_verified
 """
 
+import argparse
 import io
 import json
 import sys
@@ -109,7 +110,7 @@ def execute(
     if "task_id" not in data:
         return {
             "success": False,
-            "error": "缺少必需字段: task_id",
+            "error": "缺少必填字段: task_id",
         }
 
     task_id = data["task_id"]
@@ -130,7 +131,7 @@ def execute(
     else:
         return {
             "success": False,
-            "error": "缺少必需字段: search_directory 或 index_file（至少提供一个）",
+            "error": "缺少必填字段: search_directory 或 index_file（至少提供一个）",
         }
 
     write_data = {
@@ -208,17 +209,17 @@ def execute_batch(
         if not isinstance(item, dict):
             return {
                 "success": False,
-                "error": f"第 {idx} 个元素必须是字典类型",
+                "error": f"第{idx} 个元素必须是字典类型",
             }
         if "task_id" not in item:
             return {
                 "success": False,
-                "error": f"第 {idx} 个元素缺少必需字段: task_id",
+                "error": f"第{idx} 个元素缺少必需字段: task_id",
             }
         if "search_directory" not in item and "index_file" not in item:
             return {
                 "success": False,
-                "error": f"第 {idx} 个元素缺少必需字段: search_directory 或 index_file（至少提供一个）",
+                "error": f"第{idx} 个元素缺少必需字段: search_directory 或 index_file（至少提供一个）",
             }
 
     writer = None
@@ -276,29 +277,61 @@ def main(data: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
     return execute(data, **kwargs)
 
 
+def _parse_cli_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="write-pg-verified 回库入口",
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    parser.add_argument("first", nargs="?", help="兼容参数1：task_id 或 index_file")
+    parser.add_argument("second", nargs="?", help="兼容参数2：search_directory")
+    parser.add_argument("--task-id", dest="task_id", help="任务ID")
+    parser.add_argument("--search-directory", dest="search_directory", help="搜索目录")
+    parser.add_argument("--index-file", dest="index_file", help="索引文件路径")
+    parser.add_argument("--init", dest="init_table", help="原始表名，默认 poi_init")
+    parser.add_argument("--verified", dest="verified_table", help="成果表名，默认 poi_verified")
+    return parser.parse_args()
+
+
+def _build_cli_data(args: argparse.Namespace) -> Optional[Dict[str, Any]]:
+    if args.index_file:
+        return {
+            "task_id": args.task_id or Path(args.index_file).stem.replace("index_", ""),
+            "index_file": args.index_file,
+        }
+
+    if args.task_id and args.search_directory:
+        return {
+            "task_id": args.task_id,
+            "search_directory": args.search_directory,
+        }
+
+    if args.first and args.second:
+        return {
+            "task_id": args.first,
+            "search_directory": args.second,
+        }
+
+    if args.first and not args.second:
+        return {
+            "task_id": args.task_id or Path(args.first).stem.replace("index_", ""),
+            "index_file": args.first,
+        }
+
+    return None
+
+
 if __name__ == "__main__":
-    if len(sys.argv) == 3:
-        task_id, search_dir = sys.argv[1], sys.argv[2]
-        test_data = {
-            "task_id": task_id,
-            "search_directory": search_dir,
-        }
-        result = execute(test_data)
-        print("\n=== 执行结果 ===")
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-    elif len(sys.argv) == 2:
-        index_file = sys.argv[1]
-        test_data = {
-            "task_id": Path(index_file).stem.replace("index_", ""),
-            "index_file": index_file,
-        }
-        result = execute(test_data)
-        print("\n=== 执行结果 ===")
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-    else:
+    args = _parse_cli_args()
+    test_data = _build_cli_data(args)
+
+    if test_data is None:
         print("用法:")
-        print("  模式1（推荐）: python SKILL.py <task_id> <search_directory>")
-        print("  模式2（兼容）: python SKILL.py <index_file_path>")
-        print("\n示例:")
-        print("  python SKILL.py TASK_20260227_001 output/results")
-        print("  python SKILL.py output/results/TASK_20260227_001/index.json")
+        print("  兼容模式1: python SKILL.py <task_id> <search_directory>")
+        print("  兼容模式2: python SKILL.py <index_file_path>")
+        print("  推荐模式1: python SKILL.py --task-id <task_id> --search-directory <dir> [--init <table>] [--verified <table>]")
+        print("  推荐模式2: python SKILL.py --index-file <path> [--task-id <task_id>] [--init <table>] [--verified <table>]")
+        sys.exit(1)
+
+    result = execute(test_data, init=args.init_table, verified=args.verified_table)
+    print("\n=== 执行结果 ===")
+    print(json.dumps(result, ensure_ascii=False, indent=2))

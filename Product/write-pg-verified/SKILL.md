@@ -128,6 +128,8 @@ results = execute_batch(
 ```bash
 python SKILL.py <task_id> <search_directory>
 python SKILL.py <index_file_path>
+python SKILL.py --task-id <task_id> --search-directory <search_directory> [--init <init_table>] [--verified <verified_table>]
+python SKILL.py --index-file <index_file_path> [--task-id <task_id>] [--init <init_table>] [--verified <verified_table>]
 ```
 
 ## 目录结构

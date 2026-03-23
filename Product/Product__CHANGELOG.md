@@ -1,7 +1,8 @@
 # Product CHANGELOG
 
-## [Unreleased]
-
+## [1.7.1] - 2026-03-23
+### Changed
+- write-pg-verified增加主入口参数，支持配置写入的表名
 ### Docs
 - 按当前 `Product/` 目录结构重写域级 README，补齐四个核心技能、正式脚本入口、输出目录和推荐流程。
 - 重建 Product 域 changelog 顶部结构，便于后续继续按域记录 Added / Changed / Fixed。
