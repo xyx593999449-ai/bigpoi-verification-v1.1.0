@@ -277,6 +277,7 @@ def get_action(status: str) -> str:
         "downgraded": "modify",
         "manual_review": "manual_review",
         "rejected": "reject",
+        "trigger_fallback": "reroute_model",
     }
     return mapping.get(status, "manual_review")
 
@@ -501,6 +502,12 @@ def main() -> int:
 
     overall_seed = seed.get("overall") if isinstance(seed.get("overall"), dict) else {}
     overall_confidence = float(overall_seed.get("confidence", measure_overall_confidence(dimensions)))
+    
+    # [Sub-Agent 3 改造核心: Fallback 路由网关]
+    if overall_confidence < 0.85:
+        # 当模型结论置信度低于 85% 时，停止写入正式决策，反向通知外层 Worker / Orchestrator 进行模型升格。
+        raise ValueError(f"[ModelRouteFallback] 识别到当前的决策总体置信度仅为 {overall_confidence:.2f} (< 0.85)，触发阈值熔断。请外壳程序或子 Agent 将此上下文重路由给高阶大模型 (如 Claude-3.5-Sonnet) 并重试本环节。")
+    
     status = str(overall_seed.get("status", infer_status(dimensions, overall_confidence)))
     action = str(overall_seed.get("action", get_action(status)))
     summary = get_summary(status, overall_confidence, dimensions, normalized_corrections)

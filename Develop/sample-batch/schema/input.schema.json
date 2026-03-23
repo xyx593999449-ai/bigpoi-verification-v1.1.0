@@ -1,0 +1,39 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ft-git.sf-express.com/ft-scaffold/ai-skills/schemas/row_batch_input.schema.json",
+    "title": "批次抽样输入数据模式",
+    "description": "定义批次抽样技能的输入数据标准化格式",
+    "version": "1.0.0",
+    "type": "object",
+    "required": ["data_src_path", "skill_name"],
+    "properties": {
+      "data_src_path": {
+        "type": "string",
+        "description": "数据源路径",
+        "minLength": 1,
+        "maxLength": 200,
+        "examples": ["DB_#1"]
+      },
+      "skill_name": {
+        "type": "string",
+        "description": "调用技能名称",
+        "minLength": 1,
+        "maxLength": 200,
+        "examples": ["BigPoi-verification-qc"]
+      },
+      "worker_id": {
+        "type": ["string", "integer"],
+        "description": "工作进程ID（雪花算法生成的唯一标识）",
+        "examples": [1234567890123456789, "1234567890123456789"]
+      }
+    },
+    "additionalProperties": false,
+    "examples": [
+      {
+        "data_src_path": "DB_#1",
+        "skill_name": "BigPoi-verification-qc",
+        "worker_id": 1234567890123456789
+      }
+    ]
+  }
+  

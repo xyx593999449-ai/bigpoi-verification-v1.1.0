@@ -1,7 +1,13 @@
 # Product CHANGELOG
 
-## [1.7.1] - 2026-03-23
+## [1.8.0] - 2026-03-23
+### Added
+- 为 `verification` 提供大模型熔断前置距离注入能力（在落数据前剔除 raw_data 并置入直实地理距离）。
 ### Changed
+- `evidence-collection` 中的 `call_map_vendor` 全面 AsyncIO 化，消除同步请求的堆叠损耗。
+- `write_decision_output.py` 下放 0.85 置信度网卡拦截限制，向流控制器发起降级退回换模指令。
+
+## [1.7.1] - 2026-03-23
 - write-pg-verified增加主入口参数，支持配置写入的表名
 ### Docs
 - 按当前 `Product/` 目录结构重写域级 README，补齐四个核心技能、正式脚本入口、输出目录和推荐流程。

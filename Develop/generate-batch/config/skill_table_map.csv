@@ -1,0 +1,2 @@
+skill_name,input_table_name,input_table_flds,select_condition,select_limit,update_condition,output_table_name,batch_table_name
+BigPoi-verification-qc,public.poi_verified,"task_id,id,'{batch_id}',name,x_coord,y_coord,poi_type,address,city,city_adcode,1,verify_result,'待质检',null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,verify_info,evidence_record","verify_status='已核实' and verify_result='核实通过'",1000000,"verify_status='生成批次', updatetime=now()",public.poi_qc,public.poi_batch_task

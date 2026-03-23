@@ -13,6 +13,7 @@
 
 | 路径 | 说明 |
 |---|---|
+| `Develop/` | 调度与并发网关域，包含 Celery 的 Task 生产及 Worker 分发 |
 | `Product/` | 生产核验域，面向正式 BigPOI 核验结果 |
 | `Quality/` | 质量复核域，面向 QC 规则判定与回库 |
 | `docs/backups/` | 文档备份目录，保存更新前的 README / CHANGELOG 快照 |
@@ -20,7 +21,12 @@
 
 ## 3. 域划分
 
-### 3.1 Product
+### 3.1 Develop
+负责全系统的异步驱动与容灾分发：
+- `generate-batch/`
+- `worker/`
+
+### 3.2 Product
 
 包含 4 个核心技能：
 
@@ -36,15 +42,17 @@
 - `BigPoi-verification-qc/`
 - `qc-write-pg-qc/`
 
-## 4. 推荐流程
+## 4. 推荐异步并发流程
 
 ```mermaid
 flowchart TD
-    A["输入 POI"] --> B["Product: evidence-collection"]
-    B --> C["Product: verification"]
-    C --> D["Product: skills-bigpoi-verification"]
+    DB["PostgreSQL 库"] --> |"Batch 推流"| Q["Celery Redis 消息队列"]
+    Q --> |"Worker 并发消费"| A["Develop: celery_worker"]
+    A --> B["Product: evidence-collection (AsyncIO 并发取证 & 脱水)"]
+    B --> C["Product: verification (含大模型 Fallback 路由机制)"]
+    C --> D["Product: skills-bigpoi-verification (包裹成结果包)"]
     D --> E["Product: write-pg-verified"]
-    D --> F["Quality: BigPoi-verification-qc"]
+    D --> |"动态概率抽检"| F["Quality: BigPoi-verification-qc (纯代码 0-Token 质检引擎)"]
     F --> G["Quality: qc-write-pg-qc"]
 ```
 

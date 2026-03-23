@@ -14,7 +14,17 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from run_context import collect_item_run_ids, require_context, set_item_run_context
 from evidence_collection_common import ensure_stdout_utf8, normalize_input_poi, read_json_file, utc_iso_now, utc_timestamp, write_json_file
+import math
 
+# [Sub-Agent 3 改造核心: 前置物理距离预算，彻底剥离模型数学损耗]
+def compute_haversine_distance(lon1: float, lat1: float, lon2: float, lat2: float) -> int:
+    R = 6371000  # radius of Earth in meters
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+    a = math.sin(delta_phi / 2.0) ** 2 + math.cos(phi1) * math.cos(phi2) * (math.sin(delta_lambda / 2.0) ** 2)
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return int(R * c)
 
 ALLOWED_SOURCE_TYPES = {"official", "map_vendor", "internet", "user_contributed", "other"}
 
@@ -115,14 +125,29 @@ def normalize_evidence_item(item: dict, poi: dict, timestamp: str, index: int, e
             if "longitude" not in coords or "latitude" not in coords:
                 errors.append(f"{prefix}.data.coordinates must contain longitude and latitude")
             else:
-                normalized_data["coordinates"] = {
-                    "longitude": float(coords["longitude"]),
-                    "latitude": float(coords["latitude"]),
-                }
+                lon = float(coords["longitude"])
+                lat = float(coords["latitude"])
+                normalized_data["coordinates"] = {"longitude": lon, "latitude": lat}
+                
+                # 预计算到源 POI 的真实物理距离
+                input_coords = poi.get("coordinates", {})
+                if isinstance(input_coords, dict) and "longitude" in input_coords and "latitude" in input_coords:
+                    dist = compute_haversine_distance(
+                        float(input_coords["longitude"]), 
+                        float(input_coords["latitude"]), 
+                        lon, 
+                        lat
+                    )
+                    normalized_data["computed_distance_meters"] = dist
+                    
         if isinstance(data.get("administrative"), dict):
             normalized_data["administrative"] = data["administrative"]
-        if isinstance(data.get("raw_data"), dict):
-            normalized_data["raw_data"] = data["raw_data"]
+        
+        # [EvidencePruner 脱水改造]
+        # 抛弃携带大量无效标签与全量网络结构的 raw_data
+        # if isinstance(data.get("raw_data"), dict):
+        #     normalized_data["raw_data"] = data["raw_data"]
+        
         normalized["data"] = prune_empty(normalized_data)
 
     for field in ("verification", "matching", "metadata"):

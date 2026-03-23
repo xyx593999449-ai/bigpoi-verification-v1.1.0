@@ -1,0 +1,2 @@
+skill_name,input_table_name,sample_flds,sample_fld_weight,sample_ratio,positive_update_condition,negative_update_condition,batch_table_name,batch_id_fld
+BigPoi-verification-qc,public.poi_qc,batch_id,1,0.5,"quality_status='待质检', updatetime=now()","quality_status='未抽中', updatetime=now()",public.poi_batch_task,batch_id

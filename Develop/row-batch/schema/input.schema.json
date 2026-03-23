@@ -1,0 +1,37 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://ft-git.sf-express.com/ft-scaffold/ai-skills/schemas/row_batch_input.schema.json",
+    "title": "按行批量执行输入数据模式",
+    "description": "定义按行批量执行技能的输入数据标准化格式",
+    "version": "1.0.0",
+    "type": "object",
+    "required": ["data_src_path", "skill_name"],
+    "properties": {
+      "data_src_path": {
+        "type": "string",
+        "description": "数据源路径",
+        "minLength": 1,
+        "maxLength": 200,
+        "examples": ["DB_#1", "./test/zfpoi_0211.csv"]
+      },
+      "skill_name": {
+        "type": "string",
+        "description": "调用技能名称",
+        "minLength": 1,
+        "maxLength": 200,
+        "examples": ["skills-bigpoi-verification"]
+      }
+    },
+    "additionalProperties": false,
+    "examples": [
+      {
+        "data_src_path": "DB_#1",
+        "skill_name": "skills-bigpoi-verification"
+      },
+      {
+        "data_src_path": "./test/zfpoi_0211.csv",
+        "skill_name": "skills-bigpoi-verification"
+      }
+    ]
+  }
+  

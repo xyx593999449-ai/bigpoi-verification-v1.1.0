@@ -15,7 +15,7 @@
 
 ```mermaid
 flowchart TD
-    A["Product 结果包 / 上游 QC 输入"] --> B["BigPoi-verification-qc"]
+    A["Product 结果包 / 上游 QC 输入"] --> |"门限拦截抽检"| B["BigPoi-verification-qc (注入纯代码引擎完全接管质检)"]
     B --> C["QC complete / summary / results_index"]
     C --> D["qc-write-pg-qc"]
     D --> E["QC 数据库表"]

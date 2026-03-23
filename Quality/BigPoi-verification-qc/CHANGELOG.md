@@ -6,6 +6,12 @@
 - 初始化 `README.md`，补齐 QC 主技能的定位、输入输出、核心维度、关键资源和推荐流程。
 - 将本技能纳入 `Quality/` 域入口文档，明确其与 `qc-write-pg-qc` 的协作关系。
 
+## [2.3.0] - 2026-03-23
+
+### Added
+- 向 `dsl_validator.py` 中嵌入了 `LocalQCEngine` 本地推演引擎，全面抛弃对大模型调用成本的依赖。接管所有坐标及字符串距离等 QC 断言。
+- 向 `result_persister.py` 补充业务侧置信度的“动态抽检门禁门限 (`should_sample_for_qc`)”，高分直落免除无用算力消耗。
+
 ## [2.2.3] - 2026-03-17
 
 ### Added

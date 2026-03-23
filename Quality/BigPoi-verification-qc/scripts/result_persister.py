@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 结果持久化脚本 - 将质检结果保存到本地文件系统
@@ -18,6 +18,21 @@ import os
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Optional, List
+import random
+
+def should_sample_for_qc(overall_confidence: float) -> bool:
+    """
+    [Sub-Agent 4 改造核心: 动态抽检逻辑]
+    通过置信度梯度抛弃掉极大比例的质检消耗：
+    - >= 0.95: 5% 概率抽检
+    - >= 0.85: 20% 概率抽检
+    - < 0.85: 100% 全量质检
+    """
+    if overall_confidence >= 0.95:
+        return random.random() < 0.05
+    if overall_confidence >= 0.85:
+        return random.random() < 0.20
+    return True
 
 
 def _is_workspace_root(path: Path) -> bool:

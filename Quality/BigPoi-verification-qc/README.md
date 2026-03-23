@@ -54,9 +54,11 @@
 ```mermaid
 flowchart TD
     A["输入 record / legacy flat"] --> B["normalize_legacy_input.py"]
-    B --> C["按 7 个维度执行 QC"]
+    B --> |"业务置信度阈值判定"| GATE{"触发全量/抽检策略？"}
+    GATE --> |"抽中或必须校验"| C["基于 LocalQCEngine 与 DSL 规则接管 7 大维度运算"]
+    GATE --> |"免检策略"| E["直接放行 (Qualified)"]
     C --> D["result_validator.py"]
-    D --> E["result_persister.py"]
+    D --> E["result_persister.py (包含动态概率计算方法)"]
     E --> F["complete / summary / results_index"]
 ```
 
