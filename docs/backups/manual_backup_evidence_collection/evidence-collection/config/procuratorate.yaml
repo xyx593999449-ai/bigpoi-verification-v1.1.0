@@ -1,0 +1,32 @@
+# POI类型配置: 检察院
+# 大类: procuratorate
+# 说明: 各级人民检察院的专有数据源配置
+
+poi_category:
+  name: "检察院"
+  description: "各级人民检察院"
+  call_map_vendors: true
+
+sources:
+  # 官方渠道
+  - name: "最高人民检察院"
+    type: "official"
+    url: "https://www.spp.gov.cn/"
+    weight: 1.0
+    description: "最高人民检察院官网"
+    update_frequency: "实时"
+
+  - name: "各省人民检察院"
+    type: "official"
+    url: "https://www.{province}.jcy.gov.cn/"
+    weight: 0.95
+    description: "省级人民检察院"
+    update_frequency: "实时"
+
+  # 互联网专有源
+  - name: "百度百科-检察院"
+    type: "internet"
+    url: "https://baike.baidu.com/"
+    weight: 0.6
+    description: "检察院百科词条"
+    update_frequency: "不定期"

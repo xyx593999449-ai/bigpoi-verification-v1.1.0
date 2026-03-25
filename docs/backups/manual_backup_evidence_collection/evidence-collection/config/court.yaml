@@ -1,0 +1,39 @@
+# POI类型配置: 法院
+# 大类: court
+# 说明: 各级人民法院的专有数据源配置
+
+poi_category:
+  name: "法院"
+  description: "各级人民法院"
+  call_map_vendors: true
+
+sources:
+  # 官方渠道
+  - name: "最高人民法院"
+    type: "official"
+    url: "https://www.court.gov.cn/"
+    weight: 1.0
+    description: "最高人民法院官网"
+    update_frequency: "实时"
+
+  - name: "各省高级人民法院"
+    type: "official"
+    url: "https://{province}fy.chinacourt.gov.cn/"
+    weight: 0.95
+    description: "省级高级人民法院"
+    update_frequency: "实时"
+
+  - name: "中国裁判文书网"
+    type: "official"
+    url: "https://wenshu.court.gov.cn/"
+    weight: 0.9
+    description: "法院信息及地址"
+    update_frequency: "实时"
+
+  # 互联网专有源
+  - name: "百度百科-法院"
+    type: "internet"
+    url: "https://baike.baidu.com/"
+    weight: 0.6
+    description: "法院百科词条"
+    update_frequency: "不定期"

@@ -1,0 +1,46 @@
+# POI类型配置: 火车站
+# 大类: railway_station
+# 说明: 高铁站、普通火车站等的专有数据源配置
+
+poi_category:
+  name: "火车站"
+  description: "高铁站、普通火车站等"
+  call_map_vendors: true
+
+sources:
+  # 官方渠道
+  - name: "中国国家铁路集团"
+    type: "official"
+    url: "https://www.china-railway.com.cn/"
+    weight: 1.0
+    description: "全国铁路车站信息"
+    update_frequency: "季度"
+
+  - name: "12306官网"
+    type: "official"
+    url: "https://www.12306.cn/"
+    weight: 1.0
+    description: "铁路客票系统，车站信息"
+    update_frequency: "实时"
+
+  - name: "中国铁路经济规划研究院"
+    type: "official"
+    url: "http://www.crecc.com.cn/"
+    weight: 0.9
+    description: "铁路规划及车站信息"
+    update_frequency: "季度"
+
+  # 互联网专有源
+  - name: "百度百科-火车站"
+    type: "internet"
+    url: "https://baike.baidu.com/"
+    weight: 0.65
+    description: "火车站百科词条"
+    update_frequency: "不定期"
+
+  - name: "高铁网"
+    type: "internet"
+    url: "https://www.gaotie.cn/"
+    weight: 0.6
+    description: "高铁及车站信息"
+    update_frequency: "周度"

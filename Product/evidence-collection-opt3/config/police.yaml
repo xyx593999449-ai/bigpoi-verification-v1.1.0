@@ -1,0 +1,39 @@
+# POI类型配置: 公安警察
+# 大类: police
+# 说明: 公安机关、派出所等的专有数据源配置
+
+poi_category:
+  name: "公安警察"
+  description: "公安机关、派出所等"
+  call_map_vendors: true
+
+sources:
+  # 官方渠道
+  - name: "公安部"
+    type: "official"
+    url: "https://www.mps.gov.cn/"
+    weight: 1.0
+    description: "公安部官网"
+    update_frequency: "实时"
+
+  - name: "各省公安厅"
+    type: "official"
+    url: "https://gat.{province}.gov.cn/"
+    weight: 0.95
+    description: "省级公安厅官网"
+    update_frequency: "实时"
+
+  - name: "各地市公安局"
+    type: "official"
+    url: "https://gaj.{city}.gov.cn/"
+    weight: 0.9
+    description: "地市级公安局官网"
+    update_frequency: "实时"
+
+  # 互联网专有源
+  - name: "百度百科-公安"
+    type: "internet"
+    url: "https://baike.baidu.com/"
+    weight: 0.55
+    description: "公安机构百科词条"
+    update_frequency: "不定期"

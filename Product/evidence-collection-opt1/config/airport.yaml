@@ -1,0 +1,60 @@
+# POI类型配置: 机场
+# 大类: airport
+# 说明: 民用机场、通用机场等的专有数据源配置
+
+poi_category:
+  name: "机场"
+  description: "民用机场、通用机场等"
+  call_map_vendors: true
+
+sources:
+  # 官方渠道
+  - name: "中国民用航空局"
+    type: "official"
+    url: "https://www.caac.gov.cn/"
+    weight: 1.0
+    description: "民用机场官方信息"
+    update_frequency: "季度"
+
+  - name: "民航局机场司"
+    type: "official"
+    url: "https://www.caac.gov.cn/XXGK/XXGK/"
+    weight: 0.95
+    description: "机场运营许可信息"
+    update_frequency: "季度"
+
+  - name: "中国民航机场协会"
+    type: "official"
+    url: "http://www.cahk.org.cn/"
+    weight: 0.9
+    description: "机场行业信息"
+    update_frequency: "月度"
+
+  # 互联网专有源
+  - name: "百度百科-机场"
+    type: "internet"
+    url: "https://baike.baidu.com/"
+    weight: 0.65
+    description: "机场百科词条"
+    update_frequency: "不定期"
+
+  - name: "民航资源网"
+    type: "internet"
+    url: "https://www.carnoc.com/"
+    weight: 0.6
+    description: "民航行业资讯"
+    update_frequency: "日度"
+
+  - name: "飞常准"
+    type: "internet"
+    url: "https://www.variflight.com/"
+    weight: 0.8
+    description: "航班及机场信息"
+    update_frequency: "实时"
+
+  - name: "航旅纵横"
+    type: "internet"
+    url: "https://www.umetrip.com/"
+    weight: 0.8
+    description: "航班及机场信息"
+    update_frequency: "实时"

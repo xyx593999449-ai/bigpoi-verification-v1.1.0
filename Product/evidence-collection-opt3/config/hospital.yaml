@@ -1,0 +1,61 @@
+# POI类型配置: 医疗机构
+# 大类: hospital
+# 说明: 三甲医院等医疗机构的专有数据源配置
+
+poi_category:
+  name: "医疗机构"
+  description: "三甲医院等医疗机构"
+  call_map_vendors: true  # 调用图商部分
+
+sources:
+  # 官方渠道 - 最高可信度
+  - name: "国家卫生健康委员会"
+    type: "official"
+    url: "https://www.nhc.gov.cn/"
+    api_endpoint: "https://www.nhc.gov.cn/wjw/syyy/list.shtml"
+    weight: 1.0
+    description: "国家卫健委官网，提供医院等级评审结果"
+    update_frequency: "季度"
+
+  - name: "国家药品监督管理局"
+    type: "official"
+    url: "https://www.nmpa.gov.cn/"
+    weight: 0.95
+    description: "提供医疗机构执业许可信息"
+    update_frequency: "月度"
+
+  - name: "各省卫生健康委员会"
+    type: "official"
+    url: "https://wsjkw.{province}.gov.cn/"
+    weight: 0.95
+    description: "省级卫健委，提供地方医院信息"
+    update_frequency: "月度"
+
+  - name: "国家医疗保障局"
+    type: "official"
+    url: "https://www.nhsa.gov.cn/"
+    weight: 0.9
+    description: "医保定点医院信息"
+    update_frequency: "月度"
+
+  # 互联网专有源
+  - name: "百度百科-医院"
+    type: "internet"
+    url: "https://baike.baidu.com/"
+    weight: 0.6
+    description: "百度百科医院词条"
+    update_frequency: "不定期"
+
+  - name: "好大夫在线"
+    type: "internet"
+    url: "https://www.haodf.com/"
+    weight: 0.55
+    description: "医疗信息平台"
+    update_frequency: "周度"
+
+  - name: "丁香园"
+    type: "internet"
+    url: "https://www.dxy.cn/"
+    weight: 0.5
+    description: "医疗行业信息平台"
+    update_frequency: "周度"
