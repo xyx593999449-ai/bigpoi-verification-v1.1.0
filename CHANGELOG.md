@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.0] - 2026-04-01
+
+### Added
+- Product 二期工程启动：`evidence-collection` 新增统一主控脚本，开始从三线并行演进到正式主线程序化编排。
+
+### Changed
+- Product 域文档与技能文档同步二期收敛路径，明确 `evidence_*.json` 对外 contract 不变。
+
 ## [1.3.0] - 2026-04-01
 
 ### Added

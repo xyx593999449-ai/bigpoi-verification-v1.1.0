@@ -74,3 +74,4 @@ flowchart TD
 
 - Product `evidence-collection` 已新增内部搜索代理适配层，`websearch` 默认执行 `baidu -> tavily` 回退策略。
 - Product `verification` 已移除低置信度硬中断，authority 场景改为正式输出 `manual_review / downgraded`。
+- Product `evidence-collection` 已进入二期主控收敛，新增统一 orchestrator 程序化调度证据收集链路。

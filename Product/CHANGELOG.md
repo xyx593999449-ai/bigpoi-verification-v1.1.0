@@ -1,5 +1,15 @@
 # Product CHANGELOG
 
+## [1.10.0] - 2026-04-01
+### Added
+- 新增 `evidence-collection/scripts/orchestrate_collection.py`，作为二期主控统一入口，串联 `build plan -> internal proxy + websearch -> fallback -> merge -> write evidence`。
+- 新增 `Product/tests/test_evidence_orchestrator.py`，覆盖主控关键能力的单测。
+
+### Changed
+- `evidence-collection/SKILL.md` 新增 phase2 推荐执行方式，优先使用统一主控脚本，保留分步流程兼容。
+- `run_context.py` 的入口提示更新，纳入 `orchestrate_collection.py`。
+- `Product/README.md` 新增二期主控收敛章节，明确正式主线能力与兼容边界。
+
 ## [1.9.0] - 2026-04-01
 ### Added
 - 新增 `verification/scripts/authority_category_inference.py`，实现政府/公检法 authority 分类推断与 6 位码级别修正建议生成。

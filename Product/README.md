@@ -28,6 +28,7 @@
 ### 4.1 evidence-collection
 
 - `evidence-collection/scripts/build_web_source_plan.py`
+- `evidence-collection/scripts/orchestrate_collection.py`
 - `evidence-collection/scripts/websearch_adapter.py`
 - `evidence-collection/scripts/call_internal_proxy.py`
 - `evidence-collection/scripts/call_map_vendor.py`
@@ -81,3 +82,9 @@
 - `websearch` 分支统一走 `websearch_adapter.py`，固定 `baidu -> tavily` 回退顺序，输出可直接归并的 `items` 结构。
 - 正式 evidence 在 `metadata` 最小保留 authority 高价值字段：`signal_origin`、`source_domain`、`page_title`、`text_snippet`、`level_hint`、`authority_signals`。
 - authority 类目（政府、公检法）在 `verification` 阶段进行 6 位码推断增强，低置信度场景也必须产出正式 `decision`，不再因为置信度阈值中断。
+
+## 10. 二期主控收敛（2026-04）
+
+- `evidence-collection` 已新增统一主控入口 `orchestrate_collection.py`，主线目录可直接程序化编排图商、`websearch`、补采、归并和 evidence 写出。
+- `webfetch` 仍可通过参数接入主控（`-WebFetchPath`），保留与现有流程兼容。
+- `evidence_*.json` 输出 contract 保持不变，下游 `verification` 与父 skill 无需改协议。
