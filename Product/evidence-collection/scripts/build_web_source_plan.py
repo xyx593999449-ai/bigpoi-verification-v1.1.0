@@ -5,6 +5,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Optional
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
@@ -36,6 +37,9 @@ def new_web_plan_item(poi: dict, source: dict) -> dict:
         "source_name": str(source.get("name", "")),
         "source_type": str(source.get("type", "")),
         "source_url": str(source.get("url", "")),
+        "target_poi_name": str(poi["name"]),
+        "target_city": str(poi["city"]),
+        "target_poi_type": str(poi["poi_type"]),
         "weight": float(source.get("weight", get_source_type_weight(str(source.get("type", ""))))),
         "mode": "direct_fetch" if host_info["can_fetch_direct"] else "search_first",
         "domain": host_info["host"] if host_info["can_filter_domain"] else None,
@@ -46,6 +50,12 @@ def new_web_plan_item(poi: dict, source: dict) -> dict:
     if normalize_whitespace(source.get("time_range")):
         item["time_range"] = normalize_whitespace(source.get("time_range"))
     return item
+
+
+def default_source_count(config_category: str) -> Optional[int]:
+    if config_category == "government":
+        return 5
+    return None
 
 
 def main() -> int:
@@ -81,20 +91,29 @@ def main() -> int:
         elif source["type"] == "internet":
             internet_sources.append(item)
 
+    category_default_count = default_source_count(config_name)
+    if category_default_count is not None:
+        for item in official_sources + internet_sources:
+            if item.get("count") is None:
+                item["count"] = category_default_count
+
     if normalize_whitespace(poi.get("website")):
         host_info = get_url_host_info(str(poi["website"]))
-        official_sources = [
-            {
-                "source_name": "输入POI官网",
-                "source_type": "official",
-                "source_url": str(poi["website"]),
-                "weight": 1.0,
-                "mode": "direct_fetch" if host_info["can_fetch_direct"] else "search_first",
-                "domain": host_info["host"] if host_info["can_filter_domain"] else None,
-                "query": normalize_whitespace(f"{poi['city']} {poi['name']} 官网"),
-            },
-            *official_sources,
-        ]
+        website_source = {
+            "source_name": "输入POI官网",
+            "source_type": "official",
+            "source_url": str(poi["website"]),
+            "target_poi_name": str(poi["name"]),
+            "target_city": str(poi["city"]),
+            "target_poi_type": str(poi["poi_type"]),
+            "weight": 1.0,
+            "mode": "direct_fetch" if host_info["can_fetch_direct"] else "search_first",
+            "domain": host_info["host"] if host_info["can_filter_domain"] else None,
+            "query": normalize_whitespace(f"{poi['city']} {poi['name']} 官网"),
+        }
+        if category_default_count is not None:
+            website_source["count"] = category_default_count
+        official_sources = [website_source, *official_sources]
 
     plan = {
         "status": "ok",

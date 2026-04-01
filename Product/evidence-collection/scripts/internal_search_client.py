@@ -22,21 +22,56 @@ def _to_item_list(response: Dict[str, Any]) -> List[Dict[str, Any]]:
     return []
 
 
+def _to_float(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _pick_text(item: Dict[str, Any], *keys: str) -> Optional[str]:
+    for key in keys:
+        text = _to_string(item.get(key))
+        if text:
+            return text
+    return None
+
+
+def _extract_content(provider: str, item: Dict[str, Any]) -> Optional[str]:
+    if provider == "baidu":
+        return _pick_text(item, "snippet", "content", "summary")
+    if provider == "tavily":
+        return _pick_text(item, "content", "summary")
+    return _pick_text(item, "content", "snippet", "summary")
+
+
+def _extract_source_name(provider: str, item: Dict[str, Any]) -> Optional[str]:
+    if provider == "baidu":
+        return _pick_text(item, "website", "source_name", "source", "site")
+    if provider == "tavily":
+        return _pick_text(item, "source_name", "source", "site", "website")
+    return _pick_text(item, "source_name", "source", "site", "website")
+
+
 def normalize_search_items(provider: str, response: Dict[str, Any]) -> List[Dict[str, Any]]:
     normalized: List[Dict[str, Any]] = []
     for rank, item in enumerate(_to_item_list(response), start=1):
-        normalized.append(
-            {
-                "url": _to_string(item.get("url") or item.get("link")),
-                "title": _to_string(item.get("title") or item.get("name")),
-                "content": _to_string(item.get("content") or item.get("snippet") or item.get("summary")),
-                "published_at": _to_string(item.get("published_at") or item.get("publish_time") or item.get("date")),
-                "source_name": _to_string(item.get("source_name") or item.get("source") or item.get("site")),
-                "source_type": _to_string(item.get("source_type") or item.get("type")),
-                "provider": provider,
-                "rank": rank,
-            }
-        )
+        normalized_item = {
+            "url": _pick_text(item, "url", "link"),
+            "title": _pick_text(item, "title", "name"),
+            "content": _extract_content(provider, item),
+            "published_at": _pick_text(item, "published_at", "publish_time", "date"),
+            "source_name": _extract_source_name(provider, item),
+            "source_type": _pick_text(item, "source_type", "type"),
+            "provider": provider,
+            "rank": rank,
+        }
+        provider_score = _to_float(item.get("score") or item.get("rerank_score") or item.get("authority_score"))
+        if provider_score is not None:
+            normalized_item["provider_score"] = provider_score
+        normalized.append(normalized_item)
     return normalized
 
 

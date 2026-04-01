@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
+import urllib.parse
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
@@ -26,6 +28,28 @@ from evidence_collection_common import (
 )
 
 PROVIDERS = ("baidu", "tavily")
+TITLE_SPLIT_PATTERN = re.compile(r"\s*[-_|｜/:：·•]+\s*")
+MARKDOWN_LINK_PATTERN = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+ADDRESS_LABEL_PATTERN = re.compile(
+    r"(?:办公地址|联系地址|地址|单位地址|驻地|驻址|办公地点|办公场所|办公地点位于|办公地址位于|位于)"
+    r"[:： ]*"
+    r"([^。；;|【】\[\]\n]{4,80})"
+)
+PHONE_PATTERN = re.compile(r"(?:\+?86[- ]?)?(?:0\d{2,3}-\d{7,8}|1\d{10})")
+STOP_TOKENS = ("邮政编码", "邮编", "联系电话", "咨询电话", "电话", "邮箱", "电子邮箱", "工作时间", "办公时间")
+AUTHORITY_KEYWORDS = (
+    "人民政府",
+    "公安局",
+    "公安分局",
+    "派出所",
+    "人民检察院",
+    "检察院",
+    "人民法院",
+    "法院",
+    "街道办事处",
+    "政务公开",
+    "政府在线",
+)
 
 
 def log_progress(message: str) -> None:
@@ -45,11 +69,166 @@ def iter_plan_sources(plan: Dict[str, Any]) -> List[Dict[str, Any]]:
     return result
 
 
+def clean_search_text(value: Any) -> Optional[str]:
+    text = normalize_whitespace(value)
+    if not text:
+        return None
+    text = MARKDOWN_LINK_PATTERN.sub(r"\1", text)
+    text = re.sub(r"[#*_>`]+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text or None
+
+
+def limit_clean_text(value: Any, limit: int) -> Optional[str]:
+    cleaned = clean_search_text(value)
+    return limit_text(cleaned, limit) if cleaned else None
+
+
+def canonicalize_result_url(url: Optional[str]) -> Optional[str]:
+    if not normalize_whitespace(url):
+        return None
+    parsed = urllib.parse.urlparse(str(url))
+    if not parsed.scheme or not parsed.netloc:
+        return normalize_whitespace(url)
+    filtered_query = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+    filtered_query = [
+        (key, value)
+        for key, value in filtered_query
+        if key.lower() not in {"page", "page_index", "pn", "p", "pageindex"}
+    ]
+    normalized_path = parsed.path.rstrip("/") or "/"
+    return urllib.parse.urlunparse(
+        (
+            parsed.scheme.lower(),
+            parsed.netloc.lower(),
+            normalized_path,
+            "",
+            urllib.parse.urlencode(filtered_query),
+            "",
+        )
+    )
+
+
+def dedupe_signature(url: Optional[str], domain: Optional[str], title: Optional[str], snippet: Optional[str]) -> str:
+    canonical_url = canonicalize_result_url(url)
+    if canonical_url:
+        return f"url::{canonical_url}"
+    normalized_title = normalize_whitespace(title) or ""
+    normalized_snippet = normalize_whitespace(snippet) or ""
+    return f"text::{(domain or 'unknown').lower()}::{normalized_title.lower()}::{normalized_snippet[:80].lower()}"
+
+
+def split_title_parts(title: Optional[str]) -> List[str]:
+    cleaned = clean_search_text(title)
+    if not cleaned:
+        return []
+    parts = [part for part in (normalize_whitespace(piece) for piece in TITLE_SPLIT_PATTERN.split(cleaned)) if part]
+    ordered: List[str] = []
+    for part in parts:
+        if part not in ordered:
+            ordered.append(part)
+    return ordered
+
+
+def choose_best_title_part(title: Optional[str], target_name: Optional[str]) -> Optional[str]:
+    cleaned_title = clean_search_text(title)
+    if not cleaned_title:
+        return None
+    normalized_target = normalize_whitespace(target_name)
+    if normalized_target and normalized_target in cleaned_title:
+        return normalized_target
+
+    best_part: Optional[str] = None
+    best_score = -10**9
+    for part in split_title_parts(cleaned_title):
+        score = 0
+        if normalized_target:
+            if part == normalized_target:
+                score += 120
+            elif normalized_target in part or part in normalized_target:
+                score += 80
+        if any(keyword in part for keyword in AUTHORITY_KEYWORDS):
+            score += 40
+        if "门户网站" in part:
+            score -= 10
+        if len(part) <= 3:
+            score -= 25
+        if score > best_score:
+            best_part = part
+            best_score = score
+    return best_part or cleaned_title
+
+
+def shorten_at_stop_token(text: str) -> str:
+    result = text
+    for token in STOP_TOKENS:
+        if token in result:
+            result = result.split(token, 1)[0]
+    return result.strip(" ，,。；;:：")
+
+
+def extract_structured_address(snippet: Optional[str]) -> Optional[str]:
+    cleaned = clean_search_text(snippet)
+    if not cleaned:
+        return None
+    match = ADDRESS_LABEL_PATTERN.search(cleaned)
+    if not match:
+        return None
+    candidate = shorten_at_stop_token(match.group(1))
+    if len(candidate) < 4:
+        return None
+    return limit_text(candidate, 80)
+
+
+def extract_structured_phone(snippet: Optional[str]) -> Optional[str]:
+    cleaned = clean_search_text(snippet)
+    if not cleaned:
+        return None
+    match = PHONE_PATTERN.search(cleaned)
+    if not match:
+        return None
+    return match.group(0)
+
+
+def derive_result_name(title: Optional[str], target_name: Optional[str], query: str) -> Optional[str]:
+    title_name = choose_best_title_part(title, target_name)
+    if title_name and any(keyword in title_name for keyword in AUTHORITY_KEYWORDS):
+        return title_name
+    if normalize_whitespace(target_name):
+        return normalize_whitespace(target_name)
+    return title_name or normalize_whitespace(query)
+
+
 def normalize_websearch_item(result: Dict[str, Any], plan_source: Dict[str, Any], query: str, provider_attempts: List[str]) -> Dict[str, Any]:
     source_type = str(plan_source.get("source_type") or "other")
     source_url = result.get("url") or plan_source.get("source_url")
-    title = result.get("title") or plan_source.get("source_name")
-    snippet = result.get("content")
+    target_name = normalize_whitespace(plan_source.get("target_poi_name"))
+    title = limit_clean_text(result.get("title") or plan_source.get("source_name"), 120)
+    snippet = limit_clean_text(result.get("content"), 280)
+    result_name = derive_result_name(title, target_name, query)
+    address = extract_structured_address(snippet)
+    phone = extract_structured_phone(snippet)
+    metadata: Dict[str, Any] = {
+        "signal_origin": "websearch",
+        "source_domain": extract_source_domain(source_url),
+        "page_title": title,
+        "text_snippet": snippet,
+        "authority_signals": plan_source.get("authority_signals"),
+        "provider": result.get("provider"),
+        "provider_attempts": provider_attempts,
+        "published_at": result.get("published_at"),
+        "query": query,
+        "canonical_url": canonicalize_result_url(source_url),
+    }
+    if result.get("provider_score") is not None:
+        metadata["provider_score"] = result.get("provider_score")
+    data: Dict[str, Any] = {
+        "name": result_name or query,
+    }
+    if address:
+        data["address"] = address
+    if phone:
+        data["phone"] = phone
     return {
         "source": {
             "source_id": f"WEBSEARCH_{source_type}_{result.get('provider')}_{result.get('rank')}",
@@ -58,22 +237,9 @@ def normalize_websearch_item(result: Dict[str, Any], plan_source: Dict[str, Any]
             "source_url": source_url,
             "weight": float(plan_source.get("weight") or 0.6),
         },
-        "data": {
-            "name": title or query,
-            "address": limit_text(snippet, 120),
-        },
+        "data": data,
         "collected_at": utc_iso_now(),
-        "metadata": {
-            "signal_origin": "websearch",
-            "source_domain": extract_source_domain(source_url),
-            "page_title": limit_text(title, 120),
-            "text_snippet": limit_text(snippet, 280),
-            "authority_signals": plan_source.get("authority_signals"),
-            "provider": result.get("provider"),
-            "provider_attempts": provider_attempts,
-            "published_at": result.get("published_at"),
-            "query": query,
-        },
+        "metadata": metadata,
     }
 
 
@@ -134,6 +300,9 @@ def execute_websearch_plan(
 ) -> Dict[str, Any]:
     aggregated_items: List[Dict[str, Any]] = []
     provider_attempts: List[Dict[str, Any]] = []
+    seen_signatures: Set[str] = set()
+    duplicate_count = 0
+    skipped_invalid_count = 0
     effective_provider_counter: Dict[str, int] = {"baidu": 0, "tavily": 0}
     for plan_source in iter_plan_sources(web_plan):
         query = normalize_whitespace(plan_source.get("query"))
@@ -171,7 +340,19 @@ def execute_websearch_plan(
             effective_provider_counter[effective_provider] += 1
         provider_trace = [attempt.get("provider") for attempt in attempts]
         for result in raw_items:
-            aggregated_items.append(normalize_websearch_item(result, plan_source, query, provider_trace))
+            source_url = result.get("url") or plan_source.get("source_url")
+            title = limit_clean_text(result.get("title") or plan_source.get("source_name"), 120)
+            snippet = limit_clean_text(result.get("content"), 280)
+            signature = dedupe_signature(source_url, extract_source_domain(source_url), title, snippet)
+            if signature in seen_signatures:
+                duplicate_count += 1
+                continue
+            item = normalize_websearch_item(result, plan_source, query, provider_trace)
+            if not normalize_whitespace(item.get("data", {}).get("name")):
+                skipped_invalid_count += 1
+                continue
+            seen_signatures.add(signature)
+            aggregated_items.append(item)
 
     success_count = sum(1 for item in provider_attempts if item["result_count"] > 0)
     status = "ok" if success_count == len(provider_attempts) else "partial" if success_count > 0 else "empty"
@@ -190,6 +371,11 @@ def execute_websearch_plan(
             else None
         ),
         "provider_attempts": provider_attempts,
+        "dedupe_summary": {
+            "duplicate_count": duplicate_count,
+            "skipped_invalid_count": skipped_invalid_count,
+            "retained_count": len(aggregated_items),
+        },
         "items": aggregated_items,
         "context": {
             "source": "internal_search_proxy",
@@ -264,6 +450,7 @@ def main() -> int:
                 "query_count": payload["query_count"],
                 "result_count": payload["result_count"],
                 "effective_provider": payload["effective_provider"],
+                "dedupe_summary": payload.get("dedupe_summary"),
                 "provider_attempts": payload.get("provider_attempts", []),
             },
             args.DebugLogPath,
@@ -275,9 +462,11 @@ def main() -> int:
         "result_count": payload["result_count"],
         "query_count": payload["query_count"],
         "effective_provider": payload["effective_provider"],
+        "dedupe_summary": payload.get("dedupe_summary"),
         "summary_text": (
             f"websearch 完成：共执行 {payload['query_count']} 条查询，"
             f"命中 {payload['result_count']} 条结果，"
+            f"去重 {payload.get('dedupe_summary', {}).get('duplicate_count', 0)} 条，"
             f"provider={payload['effective_provider'] or 'none'}，"
             f"状态={payload['status']}。"
         ),

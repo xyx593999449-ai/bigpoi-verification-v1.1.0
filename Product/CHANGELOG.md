@@ -1,5 +1,14 @@
 # Product CHANGELOG
 
+## [1.10.4] - 2026-04-01
+### Added
+- 新增 `prepare_websearch_review_input.py`、`write_websearch_review.py`、`build_webfetch_plan.py`，把 `websearch reviewed` 与 `webfetch fallback` 正式拆成独立可落盘阶段。
+- 新增 `Product/evidence-collection/prompts/` 下的计划生成、图商 review、`websearch` review、`webfetch` extract 提示词支持文件。
+
+### Changed
+- `evidence-collection/SKILL.md` 改为以“plan -> raw -> review -> reviewed -> merge -> formal evidence”为主线，并明确 `webfetch` 失败时继续使用 `websearch-reviewed`。
+- `websearch_adapter.py` 现在只保留最小必要字段，并在脚本层完成标题/摘要清洗、地址电话提取与重复结果去重。
+
 ## [1.10.3] - 2026-04-01
 ### Fixed
 - 为 `internal_search` 补齐正式配置段与 `search_base_url`，并限制 `websearch_adapter.py` 不再回退误用图商 `mapapi` 地址。
@@ -8,6 +17,9 @@
 - Product 主线与 phase2 相关脚本完成 Python 3.9 注解兼容处理，避免正式环境因 `X | None` 语法报错。
 - `orchestrate_collection.py`、`websearch_adapter.py`、`call_internal_proxy.py`、`merge_evidence_collection_outputs.py` 新增阶段性 stderr 日志与 `summary_text` 输出，降低 skill 执行黑盒感。
 - `build_web_source_plan.py`、`call_map_vendor.py`、`write_map_relevance_review.py`、`write_evidence_output.py` 也补齐了同样的白盒输出，确保单步执行时日志同样可读。
+
+### Docs
+- 新增二期详细设计文档，明确证据收集正式架构应演进为“计划驱动的 skill 编排 + Python worker + model review 节点”，不再以纯 Python 从 raw 直出 formal evidence 作为终态。
 
 ## [1.10.2] - 2026-04-01
 ### Added

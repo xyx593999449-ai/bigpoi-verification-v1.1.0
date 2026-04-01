@@ -27,8 +27,8 @@
 二期工程目标如下：
 
 1. 将 `Product/evidence-collection/` 收敛为唯一正式主线目录。
-2. 吸收 `opt3` 的程序化 orchestrator 思路进入正式版。
-3. 将图商、`websearch`、`webfetch`、补采、重试统一纳入 Python 主控。
+2. 吸收 `opt3` 的程序化 orchestrator 思路进入正式版，但不再以“纯 Python 一把梭”作为正式终态。
+3. 将图商、`websearch`、`webfetch`、补采、重试统一纳入“计划驱动的 skill 编排 + Python worker + 模型 review 节点”架构。
 4. 逐步淘汰 `opt1` 和 `opt3` 作为长期并行变体的角色。
 5. 保持正式 `evidence_*.json` contract 稳定，不因主控统一而破坏下游兼容性。
 
@@ -47,8 +47,9 @@
 
 从长期工程演进角度判断：
 
-- 单纯依赖子 Agent 并行协作，不够稳定
-- 完全由 Python 程序统一编排，更合理、更高效
+- 单纯依赖子 Agent 自由协作，不够稳定
+- 单纯由 Python 程序从 raw 直接跑到 formal evidence，也不够正确
+- 更合理的方向是：顶层由 skill 按计划编排，Python 负责确定性节点，模型负责 review 节点
 
 原因如下：
 
@@ -59,7 +60,12 @@
    - 日志清晰
    - 过程文件完整
    - 回归测试可重复
-3. 如果继续把核心分支编排交给 Agent 协同，执行时机、重试策略、异常恢复都会更不稳定。
+3. 但 `websearch` 与 `webfetch` 的语义抽取和相关性判断，不应继续由纯规则脚本直接生成 formal evidence，必须显式纳入模型 review 阶段。
+4. 因此，二期的核心不是把 Python orchestrator 做得更大，而是把模型 review 阶段变成主流程中的正式节点。
+
+详细设计见：
+
+- [Product_phase2_detailed_design_plan_driven_evidence_collection_20260401.md](/Users/liubai/Documents/project/ft_project/datamalo/big_poi/docs/Product_phase2_detailed_design_plan_driven_evidence_collection_20260401.md)
 
 ### 3.3 对 opt3 的现实定位
 
@@ -114,12 +120,12 @@
 
 ### 5.2 主控统一方向
 
-建议在正式版 `evidence-collection/scripts/` 中新增统一 orchestrator，纳入以下分支：
+建议在正式版中采用“计划驱动式统一主控”：
 
-- internal proxy map branch
-- websearch branch
-- webfetch branch
-- missing vendor fallback branch
+- 顶层 skill 生成 `collection-plan.json`
+- Python 脚本负责 raw、reviewed 落盘、merge、formal evidence
+- 模型节点负责图商相关性判断、`websearch` 抽取、`webfetch` 页面理解
+- merge 只吃 reviewed 文件
 
 ### 5.3 搜索与抓取统一方向
 
@@ -132,10 +138,10 @@
 ## 6. 二期实施原则
 
 - 不长期维护三套 evidence-collection 变体
-- 不新增新的顶层 evidence skill
 - 对外保持正式产物 contract 不变
-- 对内逐步把编排逻辑程序化
-- 让搜索 provider 路由、分支调度、补采和重试都落到 Python 主控中
+- 对内采用计划驱动式 skill 编排
+- 让 provider 路由、分支调度、补采和重试落到 Python worker
+- 让语义判断、字段抽取、页面理解进入显式 model review 节点
 
 ## 7. 二期建议阶段划分
 
@@ -145,19 +151,25 @@
 2. 明确 `opt1 / opt3` 的保留策略
 3. 明确 orchestrator 输入输出 contract
 
-### 第二阶段：主控脚本并入正式版
+### 第二阶段：计划文件与 reviewed gate 落地
 
-1. 在正式版新增 orchestrator
-2. 接入图商、搜索、抓取、补采分支
-3. 统一上下文、日志、异常处理
+1. 定义 `collection-plan.json`
+2. 定义三类 review seed schema
+3. 定义 reviewed-only merge 约束
 
-### 第三阶段：失败恢复与重试统一
+### 第三阶段：模型 review 节点并入正式版
+
+1. 图商线接入相关性 review
+2. `websearch` 线接入 review + extract
+3. `webfetch` 线接入页面理解节点
+
+### 第四阶段：失败恢复与重试统一
 
 1. 统一补采时机
 2. 统一重试机制
 3. 统一分支失败回退策略
 
-### 第四阶段：目录与文档治理
+### 第五阶段：目录与文档治理
 
 1. 调整相关 `SKILL.md`
 2. 调整 Product 域文档

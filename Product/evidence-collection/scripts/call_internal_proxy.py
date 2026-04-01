@@ -45,6 +45,40 @@ def fetch_proxy_response(base_url: str, vendor: str, city: str, poi_name: str, t
     return json.loads(raw)
 
 
+def emit_result(
+    *,
+    payload: dict,
+    output_path: str,
+    run_id: str,
+) -> int:
+    vendor_results = payload.get("vendors") if isinstance(payload.get("vendors"), dict) else {}
+    missing_vendors = payload.get("missing_vendors") if isinstance(payload.get("missing_vendors"), list) else []
+    write_json_file(payload, output_path)
+
+    result = {
+        "status": payload.get("status") or "ok",
+        "result_path": str(Path(output_path).resolve()),
+        "missing_vendors": missing_vendors,
+        "run_id": run_id,
+        "vendor_counts": {
+            "amap": int((vendor_results.get("amap") or {}).get("result_count") or 0),
+            "bmap": int((vendor_results.get("bmap") or {}).get("result_count") or 0),
+            "qmap": int((vendor_results.get("qmap") or {}).get("result_count") or 0),
+        },
+        "summary_text": (
+            "图商代理完成："
+            f"amap={int((vendor_results.get('amap') or {}).get('result_count') or 0)}，"
+            f"bmap={int((vendor_results.get('bmap') or {}).get('result_count') or 0)}，"
+            f"qmap={int((vendor_results.get('qmap') or {}).get('result_count') or 0)}，"
+            f"缺失图商={','.join(missing_vendors) or 'none'}。"
+        ),
+    }
+    log_progress(result["summary_text"])
+    json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
+    sys.stdout.write("\n")
+    return 1 if str(payload.get("status") or "").strip() == "error" else 0
+
+
 def main() -> int:
     ensure_stdout_utf8()
     parser = argparse.ArgumentParser()
@@ -111,30 +145,7 @@ def main() -> int:
     }
     if args.RunId and args.PoiId:
         payload = attach_context(payload, args.RunId, args.PoiId, task_id=args.TaskId)
-    write_json_file(payload, args.OutputPath)
-
-    result = {
-        "status": status,
-        "result_path": str(Path(args.OutputPath).resolve()),
-        "missing_vendors": missing_vendors,
-        "run_id": str(args.RunId or ""),
-        "vendor_counts": {
-            "amap": int(vendor_results["amap"]["result_count"]),
-            "bmap": int(vendor_results["bmap"]["result_count"]),
-            "qmap": int(vendor_results["qmap"]["result_count"]),
-        },
-        "summary_text": (
-            "图商代理完成："
-            f"amap={int(vendor_results['amap']['result_count'])}，"
-            f"bmap={int(vendor_results['bmap']['result_count'])}，"
-            f"qmap={int(vendor_results['qmap']['result_count'])}，"
-            f"缺失图商={','.join(missing_vendors) or 'none'}。"
-        ),
-    }
-    log_progress(result["summary_text"])
-    json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
-    sys.stdout.write("\n")
-    return 1 if status == "error" else 0
+    return emit_result(payload=payload, output_path=args.OutputPath, run_id=str(args.RunId or ""))
 
 
 if __name__ == "__main__":

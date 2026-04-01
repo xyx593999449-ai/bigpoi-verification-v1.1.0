@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 from pathlib import Path
@@ -8,6 +9,13 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../e
 from evidence_collection_common import new_generic_evidence_seed
 import websearch_adapter
 import internal_search_client
+import write_websearch_review
+
+FIXTURE_DIR = Path(__file__).resolve().parent
+
+
+def load_fixture(name: str):
+    return json.loads((FIXTURE_DIR / name).read_text(encoding="utf-8"))
 
 
 def test_generic_seed_includes_authority_metadata_contract():
@@ -85,6 +93,69 @@ def test_websearch_adapter_fallback_from_baidu_to_tavily(monkeypatch):
     assert payload["items"][0]["metadata"]["provider_attempts"] == ["baidu", "tavily"]
 
 
+def test_internal_search_client_normalizes_baidu_minimal_fields():
+    payload = load_fixture("baidu.json.txt")
+    items = internal_search_client.normalize_search_items("baidu", payload)
+
+    assert len(items) == 5
+    assert items[0]["source_name"] == "宝安区政府在线"
+    assert "raw_content" not in items[0]
+    assert "website" not in items[0]
+    assert items[0]["content"].startswith("招考招聘人才补贴")
+
+
+def test_websearch_adapter_deduplicates_and_extracts_structured_fields(monkeypatch):
+    baidu_payload = load_fixture("baidu.json.txt")
+
+    def fake_search_with_provider(
+        *,
+        base_url,
+        provider,
+        query,
+        domain=None,
+        block_domain=None,
+        count=None,
+        time_range=None,
+        timeout_seconds=30,
+    ):
+        assert provider == "baidu"
+        return baidu_payload
+
+    monkeypatch.setattr(websearch_adapter, "search_with_provider", fake_search_with_provider)
+    web_plan = {
+        "official_sources": [
+            {
+                "source_name": "政府官网",
+                "source_type": "official",
+                "source_url": "https://www.baoan.gov.cn/",
+                "query": "深圳市 深圳市宝安区人民政府 官网",
+                "target_poi_name": "深圳市宝安区人民政府",
+                "weight": 1.0,
+            }
+        ],
+        "internet_sources": [],
+    }
+
+    payload = websearch_adapter.execute_websearch_plan(
+        web_plan=web_plan,
+        base_url="http://internal-search/api",
+        default_count=5,
+        default_time_range="OneYear",
+        timeout_seconds=5,
+    )
+
+    assert payload["result_count"] == 4
+    assert payload["dedupe_summary"]["duplicate_count"] == 1
+
+    homepage_item = next(item for item in payload["items"] if item["source"]["source_url"] == "http://www.baoan.gov.cn/")
+    assert homepage_item["data"]["name"] == "深圳市宝安区人民政府"
+    assert "address" not in homepage_item["data"]
+
+    office_item = next(item for item in payload["items"] if item["source"]["source_url"] == "http://www.baoan.gov.cn/xxgk/")
+    assert office_item["data"]["address"] == "深圳市宝安区创业一路1号"
+    assert office_item["metadata"]["canonical_url"] == "http://www.baoan.gov.cn/xxgk"
+
+
 def test_internal_search_client_uses_protocol_params():
     captured = {}
 
@@ -142,3 +213,79 @@ def test_websearch_empty_status_is_non_blocking(tmp_path: Path):
         ["websearch_adapter.py", "-WebPlanPath", str(web_plan_path), "-OutputPath", str(out_path)],
     ):
         assert websearch_adapter.main() == 0
+
+
+def test_write_websearch_review_outputs_mergeable_items(tmp_path: Path):
+    raw_payload = {
+        "status": "ok",
+        "items": [
+            {
+                "source": {
+                    "source_id": "WEBSEARCH_OFFICIAL_BAIDU_1",
+                    "source_name": "宝安区政府在线",
+                    "source_type": "official",
+                    "source_url": "http://www.baoan.gov.cn/xxgk/",
+                    "weight": 1.0,
+                },
+                "data": {
+                    "name": "深圳市宝安区人民政府",
+                    "address": "深圳市宝安区创业一路1号",
+                },
+                "metadata": {
+                    "signal_origin": "websearch",
+                    "source_domain": "www.baoan.gov.cn",
+                    "page_title": "政务公开-宝安区人民政府门户网站",
+                    "text_snippet": "部门名称:宝安区人民政府政务公开办公室 联系地址:深圳市宝安区创业一路1号",
+                },
+            }
+        ],
+        "context": {
+            "run_id": "run_mock",
+            "poi_id": "poi_mock",
+            "task_id": "task_mock",
+            "created_at": "2026-04-01T00:00:00Z",
+        },
+    }
+    review_seed = {
+        "items": [
+            {
+                "result_id": "WEB_001",
+                "is_relevant": True,
+                "confidence": 0.91,
+                "reason": "标题和摘要均指向目标政府机关",
+                "should_fetch": True,
+                "fetch_url": "http://www.baoan.gov.cn/xxgk/",
+                "extracted": {
+                    "name": "深圳市宝安区人民政府",
+                    "address": "深圳市宝安区创业一路1号",
+                    "category_hint": "区县级政府",
+                },
+            }
+        ]
+    }
+
+    raw_path = tmp_path / "websearch-raw.json"
+    review_seed_path = tmp_path / "websearch-review-seed.json"
+    out_path = tmp_path / "websearch-reviewed.json"
+    raw_path.write_text(json.dumps(raw_payload, ensure_ascii=False), encoding="utf-8")
+    review_seed_path.write_text(json.dumps(review_seed, ensure_ascii=False), encoding="utf-8")
+
+    with patch(
+        "sys.argv",
+        [
+            "write_websearch_review.py",
+            "-WebSearchRawPath",
+            str(raw_path),
+            "-ReviewSeedPath",
+            str(review_seed_path),
+            "-OutputPath",
+            str(out_path),
+        ],
+    ):
+        assert write_websearch_review.main() == 0
+
+    reviewed = json.loads(out_path.read_text(encoding="utf-8"))
+    assert reviewed["status"] == "ok"
+    assert reviewed["items"][0]["data"]["name"] == "深圳市宝安区人民政府"
+    assert reviewed["items"][0]["metadata"]["should_fetch"] is True
+    assert reviewed["items"][0]["metadata"]["fetch_url"] == "http://www.baoan.gov.cn/xxgk/"

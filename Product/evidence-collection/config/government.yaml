@@ -13,6 +13,7 @@ sources:
     type: "official"
     url: "https://www.gov.cn/"
     weight: 1.0
+    count: 5
     description: "国务院及各级政府门户网站"
     update_frequency: "实时"
 
@@ -20,6 +21,7 @@ sources:
     type: "official"
     url: "https://www.gjzwfw.gov.cn/"
     weight: 1.0
+    count: 5
     description: "全国一体化政务服务平台"
     update_frequency: "实时"
 
@@ -28,6 +30,7 @@ sources:
     url: "https://www.mca.gov.cn/"
     api_endpoint: "https://www.mca.gov.cn/n152/n165/n178/"
     weight: 0.95
+    count: 5
     description: "行政区划和政府机关信息"
     update_frequency: "年度"
 
@@ -35,6 +38,7 @@ sources:
     type: "official"
     url: "http://www.scs.gov.cn/"
     weight: 0.9
+    count: 5
     description: "政府机构设置信息"
     update_frequency: "年度"
 
@@ -42,6 +46,7 @@ sources:
     type: "official"
     url: "https://www.{province}.gov.cn/"
     weight: 0.95
+    count: 5
     description: "省级政府门户网站"
     update_frequency: "实时"
 
@@ -49,6 +54,7 @@ sources:
     type: "official"
     url: "https://www.{city}.gov.cn/"
     weight: 0.9
+    count: 5
     description: "地市级政府门户网站"
     update_frequency: "实时"
 
@@ -57,6 +63,7 @@ sources:
     type: "internet"
     url: "https://baike.baidu.com/"
     weight: 0.6
+    count: 5
     description: "政府机构百科词条"
     update_frequency: "不定期"
 
@@ -64,5 +71,6 @@ sources:
     type: "internet"
     url: "https://zh.wikipedia.org/"
     weight: 0.55
+    count: 5
     description: "维基百科地方政府条目"
     update_frequency: "不定期"
