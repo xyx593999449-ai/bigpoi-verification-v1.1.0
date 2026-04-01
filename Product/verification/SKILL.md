@@ -73,6 +73,10 @@ The following file is a local helper module for internal `import` only. Do not e
    - 输出 `dimensions.category.details`，包含 `institution_family`、`level_label`、`evidence_refs`、`source_breakdown`
    - 与输入 `poi_type` 冲突且证据充分时写入 `corrections.category`
 7. authority 低置信度场景也必须写出正式 `decision_*.json`，通过 `uncertain / downgraded / manual_review` 表达不确定性，不允许直接抛错中断。
+8. authority 灰区场景按“规则优先、模型裁决”执行：
+   - 规则层先产出 `candidate_codes`、冲突摘要与证据引用。
+   - 可选在 `decision seed.authority_model_judgment` 注入模型裁决（`selected_code/confidence/reason/evidence_refs`）。
+   - `selected_code` 必须属于规则候选集合，否则不采纳模型裁决。
 4. 先写一个精简的 `decision seed` 中间文件，内容只放这些字段：
    - `dimensions`
    - 可选 `overall`

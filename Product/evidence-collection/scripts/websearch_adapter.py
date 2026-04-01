@@ -77,6 +77,8 @@ def search_with_fallback(
     base_url: str,
     query: str,
     domain: str | None,
+    count: int | None,
+    time_range: str | None,
     timeout_seconds: int,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str | None]:
     attempts: list[dict[str, Any]] = []
@@ -89,6 +91,8 @@ def search_with_fallback(
                 provider=provider,
                 query=query,
                 domain=domain,
+                count=count,
+                time_range=time_range,
                 timeout_seconds=timeout_seconds,
             )
             normalized_items = normalize_search_items(provider, response)
@@ -119,6 +123,8 @@ def execute_websearch_plan(
     *,
     web_plan: dict[str, Any],
     base_url: str,
+    default_count: int | None,
+    default_time_range: str | None,
     timeout_seconds: int,
 ) -> dict[str, Any]:
     aggregated_items: list[dict[str, Any]] = []
@@ -129,16 +135,22 @@ def execute_websearch_plan(
         if not query:
             continue
         domain = normalize_whitespace(plan_source.get("domain"))
+        count = int(plan_source.get("count") or default_count or 0) or None
+        time_range = normalize_whitespace(plan_source.get("time_range") or default_time_range)
         attempts, raw_items, effective_provider = search_with_fallback(
             base_url=base_url,
             query=query,
             domain=domain,
+            count=count,
+            time_range=time_range,
             timeout_seconds=timeout_seconds,
         )
         provider_attempts.append(
             {
                 "query": query,
                 "domain": domain,
+                "count": count,
+                "time_range": time_range,
                 "attempts": attempts,
                 "effective_provider": effective_provider,
                 "result_count": len(raw_items),
@@ -175,14 +187,21 @@ def execute_websearch_plan(
     }
 
 
-def resolve_search_runtime_config(common_config_path: str | None, cli_timeout_seconds: int | None) -> tuple[str, int]:
+def resolve_search_runtime_config(
+    common_config_path: str | None,
+    cli_timeout_seconds: int | None,
+    cli_default_count: int | None,
+    cli_default_time_range: str | None,
+) -> tuple[str, int, int | None, str | None]:
     search_config = get_internal_search_config(common_config_path)
     proxy_config = get_internal_proxy_config(common_config_path)
     base_url = normalize_whitespace(search_config.get("base_url")) or normalize_whitespace(proxy_config.get("search_base_url")) or normalize_whitespace(proxy_config.get("base_url"))
     if not base_url:
         raise ValueError("internal_search.base_url is required (or internal_proxy.search_base_url/base_url fallback)")
     timeout_seconds = cli_timeout_seconds if cli_timeout_seconds is not None else int(search_config.get("timeout") or proxy_config.get("timeout") or 30)
-    return base_url, timeout_seconds
+    default_count = cli_default_count if cli_default_count is not None else int(search_config.get("count") or 0) or None
+    default_time_range = normalize_whitespace(cli_default_time_range) or normalize_whitespace(search_config.get("time_range"))
+    return base_url, timeout_seconds, default_count, default_time_range
 
 
 def main() -> int:
@@ -195,13 +214,26 @@ def main() -> int:
     parser.add_argument("-RunId")
     parser.add_argument("-CommonConfigPath")
     parser.add_argument("-TimeoutSeconds", type=int)
+    parser.add_argument("-DefaultCount", type=int)
+    parser.add_argument("-DefaultTimeRange")
     args = parser.parse_args()
 
     web_plan = read_json_file(args.WebPlanPath)
     if not isinstance(web_plan, dict):
         raise ValueError("web plan must be a JSON object")
-    base_url, timeout_seconds = resolve_search_runtime_config(args.CommonConfigPath, args.TimeoutSeconds)
-    payload = execute_websearch_plan(web_plan=web_plan, base_url=base_url, timeout_seconds=timeout_seconds)
+    base_url, timeout_seconds, default_count, default_time_range = resolve_search_runtime_config(
+        args.CommonConfigPath,
+        args.TimeoutSeconds,
+        args.DefaultCount,
+        args.DefaultTimeRange,
+    )
+    payload = execute_websearch_plan(
+        web_plan=web_plan,
+        base_url=base_url,
+        default_count=default_count,
+        default_time_range=default_time_range,
+        timeout_seconds=timeout_seconds,
+    )
     if args.RunId and args.PoiId:
         payload = attach_context(payload, args.RunId, args.PoiId, task_id=args.TaskId)
     write_json_file(payload, args.OutputPath)
@@ -215,7 +247,8 @@ def main() -> int:
     }
     json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
-    return 0 if payload["status"] in {"ok", "partial"} else 1
+    # empty 在主流程中属于可降级场景，不应阻断 evidence 产出链路
+    return 0 if payload["status"] in {"ok", "partial", "empty"} else 1
 
 
 if __name__ == "__main__":

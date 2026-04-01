@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.4.2] - 2026-04-01
+
+### Added
+- Product authority 分类灰区增加“规则候选 + 模型裁决”二阶段路径。
+- Product 搜索代理参数新增 `count/time_range`，并支持计划层透传。
+
+## [1.4.1] - 2026-04-01
+
+### Fixed
+- 修正 Product 内部搜索代理调用参数与协议不一致问题。
+- 修正 websearch 全空结果在主控链路中的误失败判定，保持 evidence 可降级产出。
+- 修正 authority metadata 缺失时的降权闭环，增强强主证据与弱辅证据区分。
+
 ## [1.4.0] - 2026-04-01
 
 ### Added

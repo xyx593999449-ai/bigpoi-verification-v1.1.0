@@ -52,6 +52,13 @@ def collect_missing_vendors(internal_proxy_path: str | Path) -> list[str]:
     return []
 
 
+def should_fail_websearch_branch(returncode: int, result_payload: dict[str, Any]) -> bool:
+    if returncode == 0:
+        return False
+    status = str(result_payload.get("status") or "").strip()
+    return status not in {"empty", "partial", "ok"}
+
+
 def main() -> int:
     ensure_stdout_utf8()
     parser = argparse.ArgumentParser()
@@ -126,10 +133,12 @@ def main() -> int:
     websearch_stdout, websearch_stderr = websearch_proc.communicate()
     if internal_proc.returncode != 0:
         raise RuntimeError(f"call_internal_proxy failed: {(internal_stderr or internal_stdout).strip()}")
-    if websearch_proc.returncode != 0:
+    internal_result = json.loads(internal_stdout.strip() or "{}")
+    websearch_result = json.loads(websearch_stdout.strip() or "{}")
+    if should_fail_websearch_branch(websearch_proc.returncode, websearch_result):
         raise RuntimeError(f"websearch_adapter failed: {(websearch_stderr or websearch_stdout).strip()}")
-    json.loads(internal_stdout.strip() or "{}")
-    json.loads(websearch_stdout.strip() or "{}")
+    if str(internal_result.get("status") or "").strip() == "error":
+        raise RuntimeError(f"call_internal_proxy returned error status: {(internal_stderr or internal_stdout).strip()}")
 
     vendor_fallback_paths: list[str] = []
     missing_vendors = collect_missing_vendors(internal_proxy_path)

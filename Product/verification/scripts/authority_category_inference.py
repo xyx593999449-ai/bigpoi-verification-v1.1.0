@@ -90,8 +90,27 @@ def _item_weight(item: dict[str, Any]) -> float:
     metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
     source_type = str(source.get("source_type") or "other")
     base = SOURCE_TYPE_WEIGHT.get(source_type, SOURCE_TYPE_WEIGHT["other"])
-    if not str(metadata.get("signal_origin") or "").strip():
+    signal_origin = str(metadata.get("signal_origin") or "").strip()
+    source_domain = str(metadata.get("source_domain") or "").strip()
+    page_title = str(metadata.get("page_title") or "").strip()
+    text_snippet = str(metadata.get("text_snippet") or "").strip()
+
+    # metadata 最小 contract 的缺失惩罚：显式拉开强主证据与弱辅证据的权重
+    if not signal_origin:
         base *= 0.6
+    if not source_domain:
+        base *= 0.75
+    if not page_title:
+        base *= 0.9
+    if not text_snippet:
+        base *= 0.8
+
+    # official 证据若缺核心 metadata，进一步降级为弱辅证
+    if source_type == "official":
+        if not source_domain:
+            base *= 0.8
+        if not (page_title or text_snippet):
+            base *= 0.7
     return round(base, 4)
 
 
@@ -147,7 +166,62 @@ def _pick_top(scores: dict[str, float]) -> tuple[str | None, float, float]:
     return top_code, round(top_score, 4), round(second_score, 4)
 
 
-def infer_authority_category(poi: dict[str, Any], evidence: list[dict[str, Any]]) -> dict[str, Any] | None:
+def _build_candidate_codes(family_scores: dict[str, float], level_scores: dict[str, float]) -> list[str]:
+    candidates: list[str] = []
+    sorted_families = [name for name, score in sorted(family_scores.items(), key=lambda kv: kv[1], reverse=True) if score > 0]
+    for family in sorted_families:
+        if family in FAMILY_TO_CODE:
+            candidates.append(FAMILY_TO_CODE[family])
+        elif family == "government":
+            sorted_levels = [code for code, score in sorted(level_scores.items(), key=lambda kv: kv[1], reverse=True) if score > 0]
+            candidates.extend(sorted_levels[:3])
+    deduped: list[str] = []
+    for code in candidates:
+        if code not in deduped:
+            deduped.append(code)
+    return deduped[:5]
+
+
+def _build_conflict_summary(family_scores: dict[str, float], level_scores: dict[str, float]) -> dict[str, Any]:
+    top_families = sorted(family_scores.items(), key=lambda kv: kv[1], reverse=True)[:3]
+    top_levels = sorted(level_scores.items(), key=lambda kv: kv[1], reverse=True)[:3]
+    return {
+        "family_ranking": [{"family": name, "score": round(score, 4)} for name, score in top_families],
+        "government_level_ranking": [{"code": code, "score": round(score, 4)} for code, score in top_levels],
+    }
+
+
+def _apply_model_adjudication(
+    *,
+    model_judgment: dict[str, Any] | None,
+    candidate_codes: list[str],
+    input_code: str,
+) -> dict[str, Any] | None:
+    if not isinstance(model_judgment, dict):
+        return None
+    selected_code = _normalize_text(model_judgment.get("selected_code"))
+    if not selected_code or selected_code not in AUTHORITY_CODES or selected_code not in candidate_codes:
+        return None
+    confidence = float(model_judgment.get("confidence") or 0.0)
+    confidence = max(0.0, min(1.0, confidence))
+    reason = _normalize_text(model_judgment.get("reason")) or "灰区模型裁决"
+    evidence_refs = model_judgment.get("evidence_refs") if isinstance(model_judgment.get("evidence_refs"), list) else []
+    result = "pass" if selected_code == input_code else "fail" if confidence >= 0.75 else "uncertain"
+    return {
+        "result": result,
+        "confidence": round(confidence, 4),
+        "selected_code": selected_code,
+        "reason": reason,
+        "evidence_refs": [str(ref) for ref in evidence_refs if str(ref).strip()],
+    }
+
+
+def infer_authority_category(
+    poi: dict[str, Any],
+    evidence: list[dict[str, Any]],
+    *,
+    model_judgment: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
     input_code = _normalize_text(poi.get("poi_type"))
     if input_code not in AUTHORITY_CODES:
         return None
@@ -202,7 +276,32 @@ def infer_authority_category(poi: dict[str, Any], evidence: list[dict[str, Any]]
             family_confidence = min(0.99, family_confidence + min(top_level_score / 8.0, 0.2))
 
     confidence = round(max(0.0, min(1.0, family_confidence)), 4)
+    candidate_codes = _build_candidate_codes(family_scores, level_scores)
+    conflict_summary = _build_conflict_summary(family_scores, level_scores)
     if not selected_code:
+        model_decision = _apply_model_adjudication(
+            model_judgment=model_judgment,
+            candidate_codes=candidate_codes,
+            input_code=input_code,
+        )
+        if model_decision:
+            return {
+                "result": model_decision["result"],
+                "confidence": model_decision["confidence"],
+                "selected_code": model_decision["selected_code"],
+                "details": {
+                    "expected_value": input_code,
+                    "observed_value": model_decision["selected_code"],
+                    "institution_family": institution_family,
+                    "level_label": level_label,
+                    "reason": model_decision["reason"],
+                    "evidence_refs": sorted(set(evidence_refs + model_decision["evidence_refs"])),
+                    "source_breakdown": {k: round(v, 4) for k, v in source_breakdown.items()},
+                    "candidate_codes": candidate_codes,
+                    "conflict_summary": conflict_summary,
+                    "adjudication_source": "model_judgment",
+                },
+            }
         return {
             "result": "uncertain",
             "confidence": min(confidence, 0.74),
@@ -215,6 +314,9 @@ def infer_authority_category(poi: dict[str, Any], evidence: list[dict[str, Any]]
                 "reason": uncertain_reason or "authority 分类证据不足。",
                 "evidence_refs": sorted(set(evidence_refs)),
                 "source_breakdown": {k: round(v, 4) for k, v in source_breakdown.items()},
+                "candidate_codes": candidate_codes,
+                "conflict_summary": conflict_summary,
+                "adjudication_source": "rule_only",
             },
         }
 
@@ -231,6 +333,9 @@ def infer_authority_category(poi: dict[str, Any], evidence: list[dict[str, Any]]
                 "reason": "多源证据一致指向当前输入类型码。",
                 "evidence_refs": sorted(set(evidence_refs)),
                 "source_breakdown": {k: round(v, 4) for k, v in source_breakdown.items()},
+                "candidate_codes": candidate_codes,
+                "conflict_summary": conflict_summary,
+                "adjudication_source": "rule_only",
             },
         }
 
@@ -250,5 +355,8 @@ def infer_authority_category(poi: dict[str, Any], evidence: list[dict[str, Any]]
             "reason": reason,
             "evidence_refs": sorted(set(evidence_refs)),
             "source_breakdown": {k: round(v, 4) for k, v in source_breakdown.items()},
+            "candidate_codes": candidate_codes,
+            "conflict_summary": conflict_summary,
+            "adjudication_source": "rule_only",
         },
     }

@@ -46,15 +46,25 @@ def search_with_provider(
     provider: str,
     query: str,
     domain: str | None = None,
+    block_domain: str | None = None,
+    count: int | None = None,
+    time_range: str | None = None,
     timeout_seconds: int = 30,
 ) -> dict[str, Any]:
     params = {
-        "provider": provider,
+        "source": provider,
         "query": query,
-        "q": query,
     }
     if domain:
-        params["domain"] = domain
+        params["use_site"] = domain
+        params["usesite"] = domain
+    if block_domain:
+        params["block_site"] = block_domain
+        params["blocksite"] = block_domain
+    if count is not None and int(count) > 0:
+        params["count"] = int(count)
+    if time_range:
+        params["time_range"] = str(time_range)
     uri = f"{base_url}?{urllib.parse.urlencode(params)}"
     with urllib.request.urlopen(uri, timeout=timeout_seconds) as response:
         raw = response.read().decode("utf-8")

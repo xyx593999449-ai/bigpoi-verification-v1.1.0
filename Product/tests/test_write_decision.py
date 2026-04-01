@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../verification/scripts")))
 import write_decision_output
+import authority_category_inference
 
 
 def _write_json(path: Path, payload):
@@ -143,3 +144,64 @@ def test_authority_inference_generates_category_correction(tmp_path: Path):
     decision = _read_single_decision(out_dir)
     assert decision["dimensions"]["category"]["result"] == "fail"
     assert decision["corrections"]["category"]["suggested"] == "130501"
+
+
+def test_authority_metadata_missing_fields_are_explicitly_downgraded():
+    rich_item = {
+        "source": {"source_type": "official", "source_url": "https://gaj.example.gov.cn/"},
+        "metadata": {
+            "signal_origin": "websearch",
+            "source_domain": "gaj.example.gov.cn",
+            "page_title": "某某市公安局",
+            "text_snippet": "某某市公安局负责辖区治安管理",
+        },
+    }
+    weak_item = {
+        "source": {"source_type": "official", "source_url": "https://gaj.example.gov.cn/"},
+        "metadata": {
+            "signal_origin": "",
+            "source_domain": "",
+            "page_title": "",
+            "text_snippet": "",
+        },
+    }
+
+    rich_weight = authority_category_inference._item_weight(rich_item)
+    weak_weight = authority_category_inference._item_weight(weak_item)
+    assert rich_weight > weak_weight
+
+
+def test_authority_gray_zone_supports_model_adjudication():
+    poi = {"poi_type": "130103", "name": "某某机关", "city": "某市"}
+    # 同时命中检察院/法院关键词，规则层应进入灰区候选
+    evidence = [
+        {
+            "evidence_id": "E1",
+            "source": {"source_type": "internet", "source_url": "https://news.example.com/a"},
+            "data": {"name": "某区人民检察院与人民法院联合发布公告"},
+            "metadata": {
+                "signal_origin": "websearch",
+                "source_domain": "news.example.com",
+                "page_title": "联合公告",
+                "text_snippet": "人民检察院与人民法院",
+            },
+        }
+    ]
+    without_model = authority_category_inference.infer_authority_category(poi, evidence)
+    assert without_model["result"] == "uncertain"
+    candidates = without_model["details"]["candidate_codes"]
+    assert "130502" in candidates or "130503" in candidates
+
+    with_model = authority_category_inference.infer_authority_category(
+        poi,
+        evidence,
+        model_judgment={
+            "selected_code": "130502",
+            "confidence": 0.82,
+            "reason": "检察院信号更集中",
+            "evidence_refs": ["E1"],
+        },
+    )
+    assert with_model["result"] == "fail"
+    assert with_model["selected_code"] == "130502"
+    assert with_model["details"]["adjudication_source"] == "model_judgment"

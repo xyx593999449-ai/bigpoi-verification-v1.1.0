@@ -1,5 +1,20 @@
 # Product CHANGELOG
 
+## [1.10.2] - 2026-04-01
+### Added
+- authority 灰区新增二阶段模型裁决入口：`decision seed.authority_model_judgment`，并对候选码集合做强约束校验。
+- `websearch` 代理调用新增 `count/time_range` 参数透传能力，支持计划层搜索控制项向下传递。
+
+### Fixed
+- authority 规则层在 uncertain 场景输出候选码集合与冲突摘要，补齐“规则优先、灰区裁决”闭环。
+
+## [1.10.1] - 2026-04-01
+### Fixed
+- 修正 `internal_search_client.py` 的代理请求参数协议，改为 `source/query` 并补齐 `use_site/usesite`、`block_site/blocksite` 站点过滤字段。
+- 修正 `websearch_adapter.py` 在 `status=empty` 时的退出码，避免把可降级场景误判为失败。
+- 修正 `orchestrate_collection.py` 对 websearch 分支失败判定，`empty/partial/ok` 不再阻断 evidence 主流程。
+- 补全 `authority_category_inference.py` 中 metadata 最小 contract 缺失时的显式降权策略（`signal_origin/source_domain/page_title/text_snippet`）。
+
 ## [1.10.0] - 2026-04-01
 ### Added
 - 新增 `evidence-collection/scripts/orchestrate_collection.py`，作为二期主控统一入口，串联 `build plan -> internal proxy + websearch -> fallback -> merge -> write evidence`。

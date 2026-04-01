@@ -27,7 +27,7 @@ from evidence_collection_common import (
 def new_web_plan_item(poi: dict, source: dict) -> dict:
     host_info = get_url_host_info(str(source.get("url", "")))
     query = normalize_whitespace(f"{poi['city']} {poi['name']} {source.get('name', '')}")
-    return {
+    item = {
         "source_name": str(source.get("name", "")),
         "source_type": str(source.get("type", "")),
         "source_url": str(source.get("url", "")),
@@ -36,6 +36,11 @@ def new_web_plan_item(poi: dict, source: dict) -> dict:
         "domain": host_info["host"] if host_info["can_filter_domain"] else None,
         "query": query,
     }
+    if source.get("count") is not None:
+        item["count"] = int(source["count"])
+    if normalize_whitespace(source.get("time_range")):
+        item["time_range"] = normalize_whitespace(source.get("time_range"))
+    return item
 
 
 def main() -> int:

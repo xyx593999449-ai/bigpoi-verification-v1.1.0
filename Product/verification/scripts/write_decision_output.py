@@ -441,8 +441,11 @@ def get_summary(status: str, confidence: float, dimensions: dict, corrections: d
     return f"\u9700\u8981\u4eba\u5de5\u590d\u6838\uff0c\u7efc\u5408\u7f6e\u4fe1\u5ea6{confidence_text}\u3002"
 
 
-def apply_authority_category_enhancement(poi: dict, evidence: list[dict], dimensions: dict, corrections: dict) -> tuple[dict, dict]:
-    inference = infer_authority_category(poi, evidence)
+def apply_authority_category_enhancement(poi: dict, evidence: list[dict], dimensions: dict, corrections: dict, seed: dict | None = None) -> tuple[dict, dict]:
+    model_judgment = None
+    if isinstance(seed, dict) and isinstance(seed.get("authority_model_judgment"), dict):
+        model_judgment = seed["authority_model_judgment"]
+    inference = infer_authority_category(poi, evidence, model_judgment=model_judgment)
     if not inference:
         return dimensions, corrections
 
@@ -530,7 +533,7 @@ def main() -> int:
     created_at = timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     overall_seed = seed.get("overall") if isinstance(seed.get("overall"), dict) else {}
-    dimensions, normalized_corrections = apply_authority_category_enhancement(poi, evidence, dimensions, normalized_corrections)
+    dimensions, normalized_corrections = apply_authority_category_enhancement(poi, evidence, dimensions, normalized_corrections, seed=seed)
     overall_confidence = float(overall_seed.get("confidence", measure_overall_confidence(dimensions)))
 
     status = str(overall_seed.get("status", infer_status(dimensions, overall_confidence)))
