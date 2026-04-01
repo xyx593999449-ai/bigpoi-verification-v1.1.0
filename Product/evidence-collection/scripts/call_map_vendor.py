@@ -8,6 +8,7 @@ import urllib.parse
 import asyncio
 import aiohttp
 from pathlib import Path
+from typing import Optional
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
@@ -24,8 +25,13 @@ from evidence_collection_common import (
 )
 
 
+def log_progress(message: str) -> None:
+    sys.stderr.write(f"[map-fallback] {message}\n")
+    sys.stderr.flush()
+
+
 # [Sub-Agent 2 改造核心: AsyncIO 与 aiohttp 并发化]
-async def fetch_vendor_response_async(session: aiohttp.ClientSession, source: str, credential: str, city: str, poi_name: str, referer: str | None, timeout_seconds: int) -> dict:
+async def fetch_vendor_response_async(session: aiohttp.ClientSession, source: str, credential: str, city: str, poi_name: str, referer: Optional[str], timeout_seconds: int) -> dict:
     definition = get_map_vendor_definition(source)
     if source == "amap":
         params = {"key": credential, "keywords": poi_name, "city": city, "output": "json", "offset": 20, "page": 1}
@@ -59,6 +65,7 @@ def main() -> int:
     parser.add_argument("-CommonConfigPath")
     parser.add_argument("-TimeoutSeconds", type=int, default=30)
     args = parser.parse_args()
+    log_progress(f"开始补采图商: source={args.Source} city={args.City} name={args.PoiName}")
 
     status = "error"
     all_items: list[dict] = []
@@ -92,9 +99,11 @@ def main() -> int:
                 src = sources[idx]
                 if isinstance(res, Exception):
                     error_message = f"[{src}] {str(res)}"
+                    log_progress(f"图商补采失败: source={src} error={error_message}")
                 else:
                     mapped_items = convert_map_vendor_api_response(src, res)
                     all_items.extend(mapped_items)
+                    log_progress(f"图商补采完成: source={src} result_count={len(mapped_items)}")
             
             if all_items:
                 status = "ok"
@@ -131,7 +140,13 @@ def main() -> int:
         "run_id": str(args.RunId or ""),
         "result_count": len(all_items),
         "error": error_message,
+        "summary_text": (
+            f"图商补采完成：source={args.Source}，"
+            f"结果 {len(all_items)} 条，"
+            f"状态={status}。"
+        ),
     }
+    log_progress(result["summary_text"])
     json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
     return 1 if status == "error" else 0

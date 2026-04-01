@@ -35,6 +35,18 @@ internal_proxy:
   retry_count: 3
   # 代理失败时是否降级到直接API调用
   fallback_to_direct: true
+  # 内部搜索代理地址（供 websearch_adapter 使用）
+  search_base_url: "http://10.82.122.209:9081/botshop/proxy/websearch"
+
+# ============================================================================
+# 内部搜索代理接口配置
+# ============================================================================
+internal_search:
+  enabled: true
+  base_url: "http://10.82.122.209:9081/botshop/proxy/websearch"
+  timeout: 30
+  count: 10
+  time_range: "OneYear"
 
 # Source 映射配置
 # 说明: 将内部使用的source标识映射到图商API的source参数

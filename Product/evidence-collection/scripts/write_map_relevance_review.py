@@ -17,6 +17,11 @@ from evidence_collection_common import ensure_stdout_utf8, read_json_file, utc_i
 ALLOWED_STATUS = {"ok", "partial", "empty", "error"}
 
 
+def log_progress(message: str) -> None:
+    sys.stderr.write(f"[map-review] {message}\n")
+    sys.stderr.flush()
+
+
 def build_candidate_key(item: dict, index: int) -> str:
     for field in ("vendor_item_id", "id", "uid"):
         value = item.get(field)
@@ -170,6 +175,7 @@ def main() -> int:
         raise ValueError("raw map payload must be an object")
     if not isinstance(review_seed, dict):
         raise ValueError("review seed must be an object")
+    log_progress(f"开始执行图商候选过滤: raw={args.RawMapPath} seed={args.ReviewSeedPath}")
 
     raw_context = require_context(raw_payload, label="raw_map", expected_poi_id=args.PoiId, expected_run_id=args.RunId, allow_missing=not bool(args.PoiId or args.RunId))
     review_context = require_context(review_seed, label="review_seed", expected_poi_id=args.PoiId or (raw_context or {}).get("poi_id"), expected_run_id=args.RunId or (raw_context or {}).get("run_id"), allow_missing=True)
@@ -199,7 +205,15 @@ def main() -> int:
         "result_path": str(Path(args.OutputPath).resolve()),
         "run_id": resolved_run_id,
         "vendors": {vendor: {"kept_count": data["kept_count"], "dropped_count": data["dropped_count"]} for vendor, data in summaries.items()},
+        "summary_text": (
+            "图商候选过滤完成："
+            + "；".join(
+                f"{vendor} 保留 {data['kept_count']} 条，剔除 {data['dropped_count']} 条"
+                for vendor, data in summaries.items()
+            )
+        ),
     }
+    log_progress(result["summary_text"])
     json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
     return 0

@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Dict, Iterable, Optional, Set, Union
 UTC_ISO_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 UTC_STAMP_FORMAT = "%Y%m%dT%H%M%SZ"
 def utc_iso_now() -> str:
@@ -16,18 +16,18 @@ def is_iso_time(value: str) -> bool:
         return True
     except ValueError:
         return False
-def build_run_id(task_id: str, poi_id: str, created_at: str | None = None) -> str:
+def build_run_id(task_id: str, poi_id: str, created_at: Optional[str] = None) -> str:
     stamp = created_at or utc_timestamp()
     digest = hashlib.sha256(f"{task_id}|{poi_id}|{stamp}".encode("utf-8")).hexdigest()[:8]
     return f"{task_id}-{poi_id}-{stamp}-{digest}"
-def build_run_directories(workspace_root: str | Path, run_id: str) -> dict[str, Path]:
+def build_run_directories(workspace_root: Union[str, Path], run_id: str) -> Dict[str, Path]:
     root = Path(workspace_root).resolve() / "output" / "runs" / str(run_id)
     return {
         "run_root": root,
         "process_dir": root / "process",
         "staging_dir": root / "staging",
     }
-def make_context(run_id: str, poi_id: str, task_id: str | None = None, created_at: str | None = None) -> dict[str, str]:
+def make_context(run_id: str, poi_id: str, task_id: Optional[str] = None, created_at: Optional[str] = None) -> Dict[str, str]:
     context = {
         "run_id": str(run_id),
         "poi_id": str(poi_id),
@@ -36,11 +36,11 @@ def make_context(run_id: str, poi_id: str, task_id: str | None = None, created_a
     if task_id:
         context["task_id"] = str(task_id)
     return context
-def attach_context(payload: dict[str, Any], run_id: str, poi_id: str, task_id: str | None = None, created_at: str | None = None) -> dict[str, Any]:
+def attach_context(payload: Dict[str, Any], run_id: str, poi_id: str, task_id: Optional[str] = None, created_at: Optional[str] = None) -> Dict[str, Any]:
     output = dict(payload)
     output["context"] = make_context(run_id, poi_id, task_id=task_id, created_at=created_at)
     return output
-def get_context(payload: Any) -> dict[str, Any] | None:
+def get_context(payload: Any) -> Optional[Dict[str, Any]]:
     if isinstance(payload, dict) and isinstance(payload.get("context"), dict):
         return dict(payload["context"])
     return None
@@ -48,10 +48,10 @@ def require_context(
     payload: Any,
     *,
     label: str,
-    expected_poi_id: str | None = None,
-    expected_run_id: str | None = None,
+    expected_poi_id: Optional[str] = None,
+    expected_run_id: Optional[str] = None,
     allow_missing: bool = False,
-) -> dict[str, Any] | None:
+) -> Optional[Dict[str, Any]]:
     context = get_context(payload)
     if context is None:
         if allow_missing:
@@ -74,7 +74,7 @@ def require_context(
         if run_id != str(expected_run_id):
             raise ValueError(f"{label}.context.run_id must match the current run")
     return context
-def set_item_run_context(item: dict[str, Any], run_id: str | None, task_id: str | None = None) -> dict[str, Any]:
+def set_item_run_context(item: Dict[str, Any], run_id: Optional[str], task_id: Optional[str] = None) -> Dict[str, Any]:
     if not run_id:
         return item
     output = dict(item)
@@ -84,8 +84,8 @@ def set_item_run_context(item: dict[str, Any], run_id: str | None, task_id: str 
         metadata["task_id"] = str(task_id)
     output["metadata"] = metadata
     return output
-def collect_item_run_ids(items: Iterable[Any]) -> set[str]:
-    run_ids: set[str] = set()
+def collect_item_run_ids(items: Iterable[Any]) -> Set[str]:
+    run_ids: Set[str] = set()
     for item in items:
         if not isinstance(item, dict):
             continue

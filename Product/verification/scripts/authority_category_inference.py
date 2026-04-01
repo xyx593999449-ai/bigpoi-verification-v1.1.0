@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 import urllib.parse
-from typing import Any
+from typing import Any, Dict, List, Optional, Tuple
 
 AUTHORITY_CODES = {
     "130101",
@@ -78,7 +78,7 @@ def _normalize_text(value: Any) -> str:
     return str(value or "").strip()
 
 
-def _extract_domain(url: str | None) -> str:
+def _extract_domain(url: Optional[str]) -> str:
     if not url:
         return ""
     parsed = urllib.parse.urlparse(str(url))
@@ -114,7 +114,7 @@ def _item_weight(item: dict[str, Any]) -> float:
     return round(base, 4)
 
 
-def _build_text_bundle(poi: dict[str, Any], item: dict[str, Any] | None = None) -> tuple[str, str]:
+def _build_text_bundle(poi: Dict[str, Any], item: Optional[Dict[str, Any]] = None) -> Tuple[str, str]:
     if item is None:
         values = (poi.get("name"), poi.get("address"), poi.get("city"))
         return " ".join(value for value in (_normalize_text(v) for v in values) if value), ""
@@ -157,7 +157,7 @@ def _score_government_level(text: str, weight: float, level_scores: dict[str, fl
             refs[code].append(evidence_id)
 
 
-def _pick_top(scores: dict[str, float]) -> tuple[str | None, float, float]:
+def _pick_top(scores: dict[str, float]) -> Tuple[Optional[str], float, float]:
     ordered = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
     if not ordered:
         return None, 0.0, 0.0
@@ -193,10 +193,10 @@ def _build_conflict_summary(family_scores: dict[str, float], level_scores: dict[
 
 def _apply_model_adjudication(
     *,
-    model_judgment: dict[str, Any] | None,
-    candidate_codes: list[str],
+    model_judgment: Optional[Dict[str, Any]],
+    candidate_codes: List[str],
     input_code: str,
-) -> dict[str, Any] | None:
+) -> Optional[Dict[str, Any]]:
     if not isinstance(model_judgment, dict):
         return None
     selected_code = _normalize_text(model_judgment.get("selected_code"))
@@ -217,11 +217,11 @@ def _apply_model_adjudication(
 
 
 def infer_authority_category(
-    poi: dict[str, Any],
-    evidence: list[dict[str, Any]],
+    poi: Dict[str, Any],
+    evidence: List[Dict[str, Any]],
     *,
-    model_judgment: dict[str, Any] | None = None,
-) -> dict[str, Any] | None:
+    model_judgment: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
     input_code = _normalize_text(poi.get("poi_type"))
     if input_code not in AUTHORITY_CODES:
         return None
@@ -254,7 +254,7 @@ def infer_authority_category(
     family_gap = top_family_score - second_family_score
     family_confidence = min(0.98, 0.45 + top_family_score / 6.0 + max(family_gap, 0.0) / 4.0)
     uncertain_reason = ""
-    selected_code: str | None = None
+    selected_code: Optional[str] = None
     institution_family = family_code
     level_label = None
     evidence_refs: list[str] = []

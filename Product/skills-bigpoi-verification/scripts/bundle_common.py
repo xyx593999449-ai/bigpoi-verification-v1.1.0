@@ -7,7 +7,7 @@ import re
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional, Union
 
 
 ALLOWED_DECISION_STATUS = {"accepted", "downgraded", "manual_review", "rejected"}
@@ -21,7 +21,7 @@ def ensure_stdout_utf8() -> None:
         sys.stderr.reconfigure(encoding="utf-8")
 
 
-def read_json_file(path: str | Path) -> Any:
+def read_json_file(path: Union[str, Path]) -> Any:
     file_path = Path(path)
     if not file_path.is_file():
         raise FileNotFoundError(f"JSON file not found: {file_path}")
@@ -31,7 +31,7 @@ def read_json_file(path: str | Path) -> Any:
     return json.loads(raw)
 
 
-def write_json_file(data: Any, path: str | Path) -> None:
+def write_json_file(data: Any, path: Union[str, Path]) -> None:
     file_path = Path(path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
     file_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
@@ -97,7 +97,7 @@ def new_short_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:8]
 
 
-def get_best_evidence(evidence: list[dict[str, Any]]) -> dict[str, Any] | None:
+def get_best_evidence(evidence: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     best_item = None
     best_weight = -1.0
     for item in evidence:
@@ -142,7 +142,7 @@ def normalize_scalar_value(value: Any) -> Any:
     return value
 
 
-def normalize_coordinate_value(value: Any) -> dict[str, Any] | None:
+def normalize_coordinate_value(value: Any) -> Optional[Dict[str, Any]]:
     if not isinstance(value, dict):
         return None
     normalized: dict[str, Any] = {}
@@ -359,7 +359,7 @@ def test_bundle_name(name: str, prefix: str) -> bool:
     return bool(re.fullmatch(rf"{re.escape(prefix)}_\d{{8}}T\d{{6}}Z\.json", name))
 
 
-def find_latest_index(task_dir: str | Path) -> dict[str, Any] | None:
+def find_latest_index(task_dir: Union[str, Path]) -> Optional[Dict[str, Any]]:
     files = sorted(Path(task_dir).glob("index_*.json"), key=lambda item: item.name, reverse=True)
     if not files:
         return None

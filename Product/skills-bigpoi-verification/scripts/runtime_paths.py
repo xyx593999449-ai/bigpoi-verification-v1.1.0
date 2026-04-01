@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, List, Optional, Union
 
 
 WORKSPACE_MARKERS: tuple[tuple[str, ...], ...] = (
@@ -23,7 +23,7 @@ class WorkspaceDetection:
     strategy: str
 
 
-def _normalize_path(path: str | Path | None) -> Path | None:
+def _normalize_path(path: Optional[Union[str, Path]]) -> Optional[Path]:
     if path is None:
         return None
     text = str(path).strip()
@@ -32,8 +32,8 @@ def _normalize_path(path: str | Path | None) -> Path | None:
     return Path(text).resolve()
 
 
-def _iter_candidate_starts(paths: Iterable[str | Path | None]) -> list[Path]:
-    result: list[Path] = []
+def _iter_candidate_starts(paths: Iterable[Optional[Union[str, Path]]]) -> List[Path]:
+    result: List[Path] = []
     seen: set[str] = set()
     for item in paths:
         normalized = _normalize_path(item)
@@ -69,7 +69,7 @@ def _is_home_level_app_marker(root: Path, marker_parts: tuple[str, ...]) -> bool
     return root == Path.home()
 
 
-def find_workspace_root_from_start(start: str | Path | None) -> WorkspaceDetection | None:
+def find_workspace_root_from_start(start: Optional[Union[str, Path]]) -> Optional[WorkspaceDetection]:
     normalized_start = _normalize_path(start)
     if normalized_start is None:
         return None
@@ -90,9 +90,9 @@ def find_workspace_root_from_start(start: str | Path | None) -> WorkspaceDetecti
 
 
 def detect_workspace_root(
-    workspace_hint: str | Path | None = None,
-    related_paths: Iterable[str | Path | None] = (),
-    cwd: str | Path | None = None,
+    workspace_hint: Optional[Union[str, Path]] = None,
+    related_paths: Iterable[Optional[Union[str, Path]]] = (),
+    cwd: Optional[Union[str, Path]] = None,
 ) -> WorkspaceDetection:
     candidates = _iter_candidate_starts((workspace_hint, *tuple(related_paths), cwd))
     for candidate in candidates:
@@ -117,5 +117,5 @@ def detect_workspace_root(
     )
 
 
-def build_task_dir(workspace_root: str | Path, task_id: str) -> Path:
+def build_task_dir(workspace_root: Union[str, Path], task_id: str) -> Path:
     return Path(workspace_root).resolve() / "output" / "results" / str(task_id)

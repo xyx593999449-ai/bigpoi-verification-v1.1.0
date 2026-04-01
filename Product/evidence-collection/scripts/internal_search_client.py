@@ -4,17 +4,17 @@ from __future__ import annotations
 import json
 import urllib.parse
 import urllib.request
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 
-def _to_string(value: Any) -> str | None:
+def _to_string(value: Any) -> Optional[str]:
     if value is None:
         return None
     text = str(value).strip()
     return text or None
 
 
-def _to_item_list(response: dict[str, Any]) -> list[dict[str, Any]]:
+def _to_item_list(response: Dict[str, Any]) -> List[Dict[str, Any]]:
     for key in ("references", "results", "items", "data"):
         value = response.get(key)
         if isinstance(value, list):
@@ -22,8 +22,8 @@ def _to_item_list(response: dict[str, Any]) -> list[dict[str, Any]]:
     return []
 
 
-def normalize_search_items(provider: str, response: dict[str, Any]) -> list[dict[str, Any]]:
-    normalized: list[dict[str, Any]] = []
+def normalize_search_items(provider: str, response: Dict[str, Any]) -> List[Dict[str, Any]]:
+    normalized: List[Dict[str, Any]] = []
     for rank, item in enumerate(_to_item_list(response), start=1):
         normalized.append(
             {
@@ -45,12 +45,12 @@ def search_with_provider(
     base_url: str,
     provider: str,
     query: str,
-    domain: str | None = None,
-    block_domain: str | None = None,
-    count: int | None = None,
-    time_range: str | None = None,
+    domain: Optional[str] = None,
+    block_domain: Optional[str] = None,
+    count: Optional[int] = None,
+    time_range: Optional[str] = None,
     timeout_seconds: int = 30,
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     params = {
         "source": provider,
         "query": query,

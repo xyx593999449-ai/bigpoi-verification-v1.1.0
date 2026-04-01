@@ -60,13 +60,14 @@ The following files are local helper modules for internal `import` only. Do not 
 优先推荐使用统一主控（phase2）：
 
 ```bash
-python evidence-collection/scripts/orchestrate_collection.py -PoiPath <input.json> -OutputRoot <repo-root/output> -RunId <run-id> -TaskId <task-id>
+python evidence-collection/scripts/orchestrate_collection.py -PoiPath <input.json> -OutputRoot <repo-root/output> -RunId <run-id> -TaskId <task-id> [-InternalReviewSeedPath <map-review-seed.json>] [-VendorReviewSeedPaths amap=<seed-a.json> bmap=<seed-b.json>]
 ```
 
 该主控会统一执行：
 
 - `build_web_source_plan.py`
 - `call_internal_proxy.py` 与 `websearch_adapter.py` 并发执行
+- 如提供 review seed，则先运行 `write_map_relevance_review.py` 生成 `map-reviewed-*.json`
 - `missing_vendors` 的 `call_map_vendor.py` 自动补采
 - `merge_evidence_collection_outputs.py`
 - `write_evidence_output.py`
@@ -100,6 +101,7 @@ python evidence-collection/scripts/call_internal_proxy.py -PoiName <poi-name> -C
 - 图商原始结果：`map-raw-<branch>-<timestamp>.json`
 - 图商初筛结果：`map-reviewed-<branch>-<timestamp>.json`
 - `websearch` 原始结果：`websearch-raw-<timestamp>.json`
+- `websearch` 调试日志：`websearch-debug-<timestamp>.json` 或 `websearch-debug.json`
 - `webfetch` 原始结果：`webfetch-raw-<timestamp>.json`
 - 归并中间结果：`collector-merged-<timestamp>.json`
 
@@ -222,5 +224,4 @@ authority metadata 最小约束（用于后续 `verification` 分类推断）：
 - `skills-bigpoi-verification/config/poi_type_mapping.yaml`
 - `evidence-collection/config/common.yaml`
 - `evidence-collection/config/{resolved-category}.yaml`
-
 

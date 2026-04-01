@@ -16,6 +16,11 @@ from run_context import collect_item_run_ids, require_context, set_item_run_cont
 from evidence_collection_common import ensure_stdout_utf8, normalize_input_poi, read_json_file, utc_iso_now, utc_timestamp, write_json_file
 import math
 
+
+def log_progress(message: str) -> None:
+    sys.stderr.write(f"[write-evidence] {message}\n")
+    sys.stderr.flush()
+
 # [Sub-Agent 3 改造核心: 前置物理距离预算，彻底剥离模型数学损耗]
 def compute_haversine_distance(lon1: float, lat1: float, lon2: float, lat2: float) -> int:
     R = 6371000  # radius of Earth in meters
@@ -177,6 +182,7 @@ def main() -> int:
             raise ValueError(f"input.{field} is required")
     if not re.fullmatch(r"\d{6}", str(poi["poi_type"])):
         raise ValueError("input.poi_type must be a 6-digit code")
+    log_progress(f"开始写正式 evidence: poi_id={poi['id']} name={poi['name']} run_id={args.RunId or 'unknown'}")
 
     collector_output = read_json_file(args.CollectorOutputPath)
     collector_context = require_context(collector_output, label="collector_output", expected_poi_id=str(poi["id"]), expected_run_id=args.RunId, allow_missing=not bool(args.RunId))
@@ -207,13 +213,29 @@ def main() -> int:
     output_path = output_directory / f"evidence_{timestamp}.json"
     write_json_file(normalized_items, output_path)
 
+    source_type_distribution = {"official": 0, "map_vendor": 0, "internet": 0, "user_contributed": 0, "other": 0}
+    for item in normalized_items:
+        source = item.get("source") if isinstance(item.get("source"), dict) else {}
+        source_type = str(source.get("source_type") or "")
+        if source_type in source_type_distribution:
+            source_type_distribution[source_type] += 1
+
     result = {
         "status": "ok",
         "poi_id": str(poi["id"]),
         "run_id": resolved_run_id,
         "evidence_count": len(normalized_items),
         "evidence_path": str(output_path.resolve()),
+        "source_type_distribution": source_type_distribution,
+        "summary_text": (
+            "正式 evidence 写出完成："
+            f"共 {len(normalized_items)} 条，"
+            f"official={source_type_distribution['official']}，"
+            f"map_vendor={source_type_distribution['map_vendor']}，"
+            f"internet={source_type_distribution['internet']}。"
+        ),
     }
+    log_progress(result["summary_text"])
     json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
     return 0

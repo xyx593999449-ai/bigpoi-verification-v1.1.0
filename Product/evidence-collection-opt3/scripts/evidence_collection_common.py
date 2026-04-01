@@ -7,7 +7,7 @@ import re
 import sys
 import urllib.parse
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Dict, Iterable, List, Optional, Union
 
 
 ALLOWED_SOURCE_TYPES = {"official", "map_vendor", "internet", "user_contributed", "other"}
@@ -21,7 +21,7 @@ def ensure_stdout_utf8() -> None:
         sys.stderr.reconfigure(encoding="utf-8")
 
 
-def read_json_file(path: str | Path) -> Any:
+def read_json_file(path: Union[str, Path]) -> Any:
     file_path = Path(path)
     if not file_path.is_file():
         raise FileNotFoundError(f"JSON file not found: {file_path}")
@@ -31,7 +31,7 @@ def read_json_file(path: str | Path) -> Any:
     return json.loads(raw)
 
 
-def write_json_file(data: Any, path: str | Path) -> None:
+def write_json_file(data: Any, path: Union[str, Path]) -> None:
     file_path = Path(path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
     file_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -61,7 +61,7 @@ def normalize_input_poi(poi: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def normalize_whitespace(value: Any) -> str | None:
+def normalize_whitespace(value: Any) -> Optional[str]:
     if value is None:
         return None
     text = str(value)
@@ -70,11 +70,11 @@ def normalize_whitespace(value: Any) -> str | None:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def normalize_punctuation(value: Any) -> str | None:
+def normalize_punctuation(value: Any) -> Optional[str]:
     return normalize_whitespace(value)
 
 
-def normalize_text(value: Any) -> str | None:
+def normalize_text(value: Any) -> Optional[str]:
     return normalize_punctuation(value)
 
 
@@ -93,7 +93,7 @@ def new_source_id(prefix: str, token: Any) -> str:
     return value[:64]
 
 
-def get_source_type_weight(source_type: str | None) -> float:
+def get_source_type_weight(source_type: Optional[str]) -> float:
     mapping = {
         "official": 1.0,
         "map_vendor": 0.85,
@@ -103,7 +103,7 @@ def get_source_type_weight(source_type: str | None) -> float:
     return mapping.get(source_type or "", 0.4)
 
 
-def get_source_type_rank(source_type: str | None) -> int:
+def get_source_type_rank(source_type: Optional[str]) -> int:
     mapping = {
         "official": 1,
         "map_vendor": 2,
@@ -154,7 +154,7 @@ def get_map_vendor_definition(source: str) -> dict[str, Any]:
     return dict(definitions[source])
 
 
-def split_location_string(location: str | None) -> dict[str, float] | None:
+def split_location_string(location: Optional[str]) -> Optional[Dict[str, float]]:
     if not location:
         return None
     parts = [part.strip() for part in location.split(",")]
@@ -210,12 +210,12 @@ def convert_bd09_to_gcj02(longitude: float, latitude: float) -> dict[str, float]
     return {"longitude": z * math.cos(theta), "latitude": z * math.sin(theta)}
 
 
-def normalize_coordinates(coordinates: Any, default_system: str = "GCJ02") -> dict[str, float] | None:
+def normalize_coordinates(coordinates: Any, default_system: str = "GCJ02") -> Optional[Dict[str, float]]:
     if coordinates is None:
         return None
 
-    longitude: float | None = None
-    latitude: float | None = None
+    longitude: Optional[float] = None
+    latitude: Optional[float] = None
     coordinate_system = default_system
 
     if isinstance(coordinates, str):
@@ -450,7 +450,7 @@ def new_generic_evidence_seed(poi: dict[str, Any], item: dict[str, Any], branch:
     return seed
 
 
-def convert_yaml_scalar(value: str | None) -> Any:
+def convert_yaml_scalar(value: Optional[str]) -> Any:
     if value is None:
         return None
     trimmed = value.strip()
@@ -466,14 +466,14 @@ def convert_yaml_scalar(value: str | None) -> Any:
         return trimmed
 
 
-def get_type_config_sources(config_path: str | Path) -> list[dict[str, Any]]:
+def get_type_config_sources(config_path: Union[str, Path]) -> List[Dict[str, Any]]:
     file_path = Path(config_path)
     if not file_path.is_file():
         raise FileNotFoundError(f"Type config not found: {file_path}")
 
     lines = file_path.read_text(encoding="utf-8-sig").splitlines()
     in_sources = False
-    current: dict[str, Any] | None = None
+    current: Optional[Dict[str, Any]] = None
     items: list[dict[str, Any]] = []
 
     for line in lines:
@@ -500,7 +500,7 @@ def get_type_config_sources(config_path: str | Path) -> list[dict[str, Any]]:
     return items
 
 
-def get_poi_type_mappings(mapping_path: str | Path) -> list[dict[str, Any]]:
+def get_poi_type_mappings(mapping_path: Union[str, Path]) -> List[Dict[str, Any]]:
     file_path = Path(mapping_path)
     if not file_path.is_file():
         raise FileNotFoundError(f"POI type mapping file not found: {file_path}")
@@ -508,7 +508,7 @@ def get_poi_type_mappings(mapping_path: str | Path) -> list[dict[str, Any]]:
     lines = file_path.read_text(encoding="utf-8-sig").splitlines()
     in_mappings = False
     collect_codes = False
-    current: dict[str, Any] | None = None
+    current: Optional[Dict[str, Any]] = None
     items: list[dict[str, Any]] = []
 
     for line in lines:
@@ -542,7 +542,7 @@ def get_poi_type_mappings(mapping_path: str | Path) -> list[dict[str, Any]]:
     return items
 
 
-def resolve_poi_type_category(poi_type: str, mapping_path: str | Path) -> str | None:
+def resolve_poi_type_category(poi_type: str, mapping_path: Union[str, Path]) -> Optional[str]:
     for mapping in get_poi_type_mappings(mapping_path):
         type_codes = sorted(mapping["type_codes"], key=len, reverse=True)
         for code in type_codes:
@@ -554,7 +554,7 @@ def resolve_poi_type_category(poi_type: str, mapping_path: str | Path) -> str | 
     return None
 
 
-def get_url_host_info(url: str | None) -> dict[str, Any]:
+def get_url_host_info(url: Optional[str]) -> Dict[str, Any]:
     result = {
         "raw_url": url,
         "host": None,
@@ -685,7 +685,7 @@ def _strip_inline_comment(value: str) -> str:
     return ''.join(result).rstrip()
 
 
-def _clean_yaml_value(value: str | None) -> str | None:
+def _clean_yaml_value(value: Optional[str]) -> Optional[str]:
     if value is None:
         return None
     cleaned = _strip_inline_comment(value).strip()
@@ -696,20 +696,20 @@ def get_repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def get_common_config_path(config_path: str | Path | None = None) -> Path:
+def get_common_config_path(config_path: Optional[Union[str, Path]] = None) -> Path:
     if config_path is not None:
         return Path(config_path)
     return get_repo_root() / 'evidence-collection' / 'config' / 'common.yaml'
 
 
-def get_common_config_lines(config_path: str | Path | None = None) -> list[str]:
+def get_common_config_lines(config_path: Optional[Union[str, Path]] = None) -> List[str]:
     path = get_common_config_path(config_path)
     if not path.is_file():
         raise FileNotFoundError(f"Common config not found: {path}")
     return path.read_text(encoding='utf-8-sig').splitlines()
 
 
-def get_internal_proxy_config(config_path: str | Path | None = None) -> dict[str, Any]:
+def get_internal_proxy_config(config_path: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
     lines = get_common_config_lines(config_path)
     in_section = False
     config: dict[str, Any] = {}
@@ -729,12 +729,12 @@ def get_internal_proxy_config(config_path: str | Path | None = None) -> dict[str
     return config
 
 
-def get_vendor_credentials(source: str, config_path: str | Path | None = None) -> list[dict[str, str]]:
+def get_vendor_credentials(source: str, config_path: Optional[Union[str, Path]] = None) -> List[Dict[str, str]]:
     lines = get_common_config_lines(config_path)
     in_credentials = False
     in_vendor = False
     vendor_indent = None
-    current: dict[str, str] | None = None
+    current: Optional[Dict[str, str]] = None
     credentials: list[dict[str, str]] = []
 
     for line in lines:
@@ -782,7 +782,7 @@ def get_vendor_credentials(source: str, config_path: str | Path | None = None) -
     return credentials
 
 
-def get_vendor_credential(source: str, config_path: str | Path | None = None) -> dict[str, str]:
+def get_vendor_credential(source: str, config_path: Optional[Union[str, Path]] = None) -> Dict[str, str]:
     credentials = get_vendor_credentials(source, config_path)
     if not credentials:
         raise ValueError(f"No credential configured for vendor: {source}")

@@ -6,7 +6,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, Optional
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
@@ -44,7 +44,7 @@ def normalize_scalar_value(value: Any) -> Any:
     return value
 
 
-def normalize_coordinate_value(value: Any) -> dict[str, Any] | None:
+def normalize_coordinate_value(value: Any) -> Optional[Dict[str, Any]]:
     if not isinstance(value, dict):
         return None
     normalized = {}

@@ -5,7 +5,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional, Tuple
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
@@ -28,8 +28,13 @@ from evidence_collection_common import (
 PROVIDERS = ("baidu", "tavily")
 
 
-def iter_plan_sources(plan: dict[str, Any]) -> list[dict[str, Any]]:
-    result: list[dict[str, Any]] = []
+def log_progress(message: str) -> None:
+    sys.stderr.write(f"[websearch] {message}\n")
+    sys.stderr.flush()
+
+
+def iter_plan_sources(plan: Dict[str, Any]) -> List[Dict[str, Any]]:
+    result: List[Dict[str, Any]] = []
     for key in ("official_sources", "internet_sources"):
         items = plan.get(key)
         if not isinstance(items, list):
@@ -40,7 +45,7 @@ def iter_plan_sources(plan: dict[str, Any]) -> list[dict[str, Any]]:
     return result
 
 
-def normalize_websearch_item(result: dict[str, Any], plan_source: dict[str, Any], query: str, provider_attempts: list[str]) -> dict[str, Any]:
+def normalize_websearch_item(result: Dict[str, Any], plan_source: Dict[str, Any], query: str, provider_attempts: List[str]) -> Dict[str, Any]:
     source_type = str(plan_source.get("source_type") or "other")
     source_url = result.get("url") or plan_source.get("source_url")
     title = result.get("title") or plan_source.get("source_name")
@@ -76,14 +81,14 @@ def search_with_fallback(
     *,
     base_url: str,
     query: str,
-    domain: str | None,
-    count: int | None,
-    time_range: str | None,
+    domain: Optional[str],
+    count: Optional[int],
+    time_range: Optional[str],
     timeout_seconds: int,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str | None]:
-    attempts: list[dict[str, Any]] = []
-    effective_provider: str | None = None
-    final_items: list[dict[str, Any]] = []
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Optional[str]]:
+    attempts: List[Dict[str, Any]] = []
+    effective_provider: Optional[str] = None
+    final_items: List[Dict[str, Any]] = []
     for provider in PROVIDERS:
         try:
             response = search_with_provider(
@@ -121,15 +126,15 @@ def search_with_fallback(
 
 def execute_websearch_plan(
     *,
-    web_plan: dict[str, Any],
+    web_plan: Dict[str, Any],
     base_url: str,
-    default_count: int | None,
-    default_time_range: str | None,
+    default_count: Optional[int],
+    default_time_range: Optional[str],
     timeout_seconds: int,
-) -> dict[str, Any]:
-    aggregated_items: list[dict[str, Any]] = []
-    provider_attempts: list[dict[str, Any]] = []
-    effective_provider_counter: dict[str, int] = {"baidu": 0, "tavily": 0}
+) -> Dict[str, Any]:
+    aggregated_items: List[Dict[str, Any]] = []
+    provider_attempts: List[Dict[str, Any]] = []
+    effective_provider_counter: Dict[str, int] = {"baidu": 0, "tavily": 0}
     for plan_source in iter_plan_sources(web_plan):
         query = normalize_whitespace(plan_source.get("query"))
         if not query:
@@ -137,6 +142,9 @@ def execute_websearch_plan(
         domain = normalize_whitespace(plan_source.get("domain"))
         count = int(plan_source.get("count") or default_count or 0) or None
         time_range = normalize_whitespace(plan_source.get("time_range") or default_time_range)
+        log_progress(
+            f"执行查询: query={query} domain={domain or 'none'} count={count or 'default'} time_range={time_range or 'none'}"
+        )
         attempts, raw_items, effective_provider = search_with_fallback(
             base_url=base_url,
             query=query,
@@ -144,6 +152,9 @@ def execute_websearch_plan(
             count=count,
             time_range=time_range,
             timeout_seconds=timeout_seconds,
+        )
+        log_progress(
+            f"查询完成: query={query} effective_provider={effective_provider or 'none'} result_count={len(raw_items)}"
         )
         provider_attempts.append(
             {
@@ -188,16 +199,16 @@ def execute_websearch_plan(
 
 
 def resolve_search_runtime_config(
-    common_config_path: str | None,
-    cli_timeout_seconds: int | None,
-    cli_default_count: int | None,
-    cli_default_time_range: str | None,
-) -> tuple[str, int, int | None, str | None]:
+    common_config_path: Optional[str],
+    cli_timeout_seconds: Optional[int],
+    cli_default_count: Optional[int],
+    cli_default_time_range: Optional[str],
+) -> Tuple[str, int, Optional[int], Optional[str]]:
     search_config = get_internal_search_config(common_config_path)
     proxy_config = get_internal_proxy_config(common_config_path)
-    base_url = normalize_whitespace(search_config.get("base_url")) or normalize_whitespace(proxy_config.get("search_base_url")) or normalize_whitespace(proxy_config.get("base_url"))
+    base_url = normalize_whitespace(search_config.get("base_url")) or normalize_whitespace(proxy_config.get("search_base_url"))
     if not base_url:
-        raise ValueError("internal_search.base_url is required (or internal_proxy.search_base_url/base_url fallback)")
+        raise ValueError("internal_search.base_url is required (or internal_proxy.search_base_url fallback)")
     timeout_seconds = cli_timeout_seconds if cli_timeout_seconds is not None else int(search_config.get("timeout") or proxy_config.get("timeout") or 30)
     default_count = cli_default_count if cli_default_count is not None else int(search_config.get("count") or 0) or None
     default_time_range = normalize_whitespace(cli_default_time_range) or normalize_whitespace(search_config.get("time_range"))
@@ -216,6 +227,7 @@ def main() -> int:
     parser.add_argument("-TimeoutSeconds", type=int)
     parser.add_argument("-DefaultCount", type=int)
     parser.add_argument("-DefaultTimeRange")
+    parser.add_argument("-DebugLogPath")
     args = parser.parse_args()
 
     web_plan = read_json_file(args.WebPlanPath)
@@ -234,9 +246,28 @@ def main() -> int:
         default_time_range=default_time_range,
         timeout_seconds=timeout_seconds,
     )
+    payload["runtime"] = {
+        "base_url": base_url,
+        "timeout_seconds": timeout_seconds,
+        "default_count": default_count,
+        "default_time_range": default_time_range,
+    }
     if args.RunId and args.PoiId:
         payload = attach_context(payload, args.RunId, args.PoiId, task_id=args.TaskId)
     write_json_file(payload, args.OutputPath)
+    if args.DebugLogPath:
+        write_json_file(
+            {
+                "status": payload["status"],
+                "result_path": str(Path(args.OutputPath).resolve()),
+                "runtime": payload.get("runtime"),
+                "query_count": payload["query_count"],
+                "result_count": payload["result_count"],
+                "effective_provider": payload["effective_provider"],
+                "provider_attempts": payload.get("provider_attempts", []),
+            },
+            args.DebugLogPath,
+        )
 
     result = {
         "status": payload["status"],
@@ -244,7 +275,14 @@ def main() -> int:
         "result_count": payload["result_count"],
         "query_count": payload["query_count"],
         "effective_provider": payload["effective_provider"],
+        "summary_text": (
+            f"websearch 完成：共执行 {payload['query_count']} 条查询，"
+            f"命中 {payload['result_count']} 条结果，"
+            f"provider={payload['effective_provider'] or 'none'}，"
+            f"状态={payload['status']}。"
+        ),
     }
+    log_progress(result["summary_text"])
     json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
     # empty 在主流程中属于可降级场景，不应阻断 evidence 产出链路

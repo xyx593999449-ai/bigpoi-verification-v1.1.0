@@ -8,6 +8,7 @@ import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional, Tuple, Union
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
@@ -64,7 +65,7 @@ def prune_empty(value):
     return value
 
 
-def read_json_file(path: str | Path):
+def read_json_file(path: Union[str, Path]):
     file_path = Path(path)
     if not file_path.is_file():
         raise FileNotFoundError(f"JSON file not found: {file_path}")
@@ -74,7 +75,7 @@ def read_json_file(path: str | Path):
     return json.loads(raw)
 
 
-def write_json_file(data, path: str | Path) -> None:
+def write_json_file(data, path: Union[str, Path]) -> None:
     file_path = Path(path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
     file_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -441,7 +442,7 @@ def get_summary(status: str, confidence: float, dimensions: dict, corrections: d
     return f"\u9700\u8981\u4eba\u5de5\u590d\u6838\uff0c\u7efc\u5408\u7f6e\u4fe1\u5ea6{confidence_text}\u3002"
 
 
-def apply_authority_category_enhancement(poi: dict, evidence: list[dict], dimensions: dict, corrections: dict, seed: dict | None = None) -> tuple[dict, dict]:
+def apply_authority_category_enhancement(poi: dict, evidence: list[dict], dimensions: dict, corrections: dict, seed: Optional[dict] = None) -> Tuple[dict, dict]:
     model_judgment = None
     if isinstance(seed, dict) and isinstance(seed.get("authority_model_judgment"), dict):
         model_judgment = seed["authority_model_judgment"]

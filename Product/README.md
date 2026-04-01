@@ -80,11 +80,16 @@
 ## 9. 一期 authority 与搜索代理策略（2026-04）
 
 - `websearch` 分支统一走 `websearch_adapter.py`，固定 `baidu -> tavily` 回退顺序，输出可直接归并的 `items` 结构。
+- `websearch_adapter.py` 现在只读取 `internal_search.base_url` 或 `internal_proxy.search_base_url`，不再回退到图商 `mapapi` 地址；运行时会额外产出 `websearch-debug.json` 便于排查代理无结果问题。
+- 证据收集主控与关键分支脚本会在 stderr 输出阶段性中文描述，并在 stdout JSON 中补充 `summary_text`，便于在 skill 日志中快速判断执行情况。
+- 上述白盒输出已覆盖 `build_web_source_plan.py`、`call_internal_proxy.py`、`websearch_adapter.py`、`call_map_vendor.py`、`write_map_relevance_review.py`、`merge_evidence_collection_outputs.py`、`write_evidence_output.py`。
 - 正式 evidence 在 `metadata` 最小保留 authority 高价值字段：`signal_origin`、`source_domain`、`page_title`、`text_snippet`、`level_hint`、`authority_signals`。
 - authority 类目（政府、公检法）在 `verification` 阶段进行 6 位码推断增强，低置信度场景也必须产出正式 `decision`，不再因为置信度阈值中断。
 
 ## 10. 二期主控收敛（2026-04）
 
 - `evidence-collection` 已新增统一主控入口 `orchestrate_collection.py`，主线目录可直接程序化编排图商、`websearch`、补采、归并和 evidence 写出。
+- 若图商候选需要先做相关性过滤，主控可通过 `-InternalReviewSeedPath` 与 `-VendorReviewSeedPaths vendor=path` 在归并前生成 `map-reviewed-*.json`，避免“先核实、后过滤”。
 - `webfetch` 仍可通过参数接入主控（`-WebFetchPath`），保留与现有流程兼容。
+- Product 域正式执行脚本已完成 Python 3.9 兼容处理，避免 `X | None` 这类 3.10+ 注解语法在正式环境报错。
 - `evidence_*.json` 输出 contract 保持不变，下游 `verification` 与父 skill 无需改协议。

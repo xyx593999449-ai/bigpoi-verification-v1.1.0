@@ -26,6 +26,11 @@ from evidence_collection_common import (
 VENDORS = ("amap", "bmap", "qmap")
 
 
+def log_progress(message: str) -> None:
+    sys.stderr.write(f"[map-proxy] {message}\n")
+    sys.stderr.flush()
+
+
 def fetch_proxy_response(base_url: str, vendor: str, city: str, poi_name: str, timeout_seconds: int) -> dict:
     definition = get_map_vendor_definition(vendor)
     params = {
@@ -68,6 +73,7 @@ def main() -> int:
         vendor_status = "error"
         items: list[dict] = []
         error_message = None
+        log_progress(f"请求图商: vendor={vendor} city={args.City} name={args.PoiName}")
 
         try:
             raw_response = fetch_proxy_response(base_url, vendor, args.City, args.PoiName, timeout_seconds)
@@ -90,6 +96,7 @@ def main() -> int:
             "items": items,
             "error": error_message,
         }
+        log_progress(f"图商完成: vendor={vendor} status={vendor_status} result_count={len(items)}")
 
     status = "error" if successful_vendors == 0 else "partial" if missing_vendors else "ok"
     payload = {
@@ -116,7 +123,15 @@ def main() -> int:
             "bmap": int(vendor_results["bmap"]["result_count"]),
             "qmap": int(vendor_results["qmap"]["result_count"]),
         },
+        "summary_text": (
+            "图商代理完成："
+            f"amap={int(vendor_results['amap']['result_count'])}，"
+            f"bmap={int(vendor_results['bmap']['result_count'])}，"
+            f"qmap={int(vendor_results['qmap']['result_count'])}，"
+            f"缺失图商={','.join(missing_vendors) or 'none'}。"
+        ),
     }
+    log_progress(result["summary_text"])
     json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
     return 1 if status == "error" else 0

@@ -8,6 +8,7 @@ import urllib.parse
 import asyncio
 import aiohttp
 from pathlib import Path
+from typing import Optional
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
@@ -25,7 +26,7 @@ from evidence_collection_common import (
 
 
 # [Sub-Agent 2 改造核心: AsyncIO 与 aiohttp 并发化]
-async def fetch_vendor_response_async(session: aiohttp.ClientSession, source: str, credential: str, city: str, poi_name: str, referer: str | None, timeout_seconds: int) -> dict:
+async def fetch_vendor_response_async(session: aiohttp.ClientSession, source: str, credential: str, city: str, poi_name: str, referer: Optional[str], timeout_seconds: int) -> dict:
     definition = get_map_vendor_definition(source)
     if source == "amap":
         params = {"key": credential, "keywords": poi_name, "city": city, "output": "json", "offset": 20, "page": 1}

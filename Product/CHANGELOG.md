@@ -1,5 +1,14 @@
 # Product CHANGELOG
 
+## [1.10.3] - 2026-04-01
+### Fixed
+- 为 `internal_search` 补齐正式配置段与 `search_base_url`，并限制 `websearch_adapter.py` 不再回退误用图商 `mapapi` 地址。
+- `websearch_adapter.py` 新增运行时调试日志输出，主控默认落盘 `websearch-debug.json`，便于排查 provider、query、time_range 与返回状态。
+- `orchestrate_collection.py` 新增图商 review 接入能力，可在归并前消费 `map review seed` 生成 `map-reviewed-*.json`，修正“过滤晚于核实且未生效”的流程问题。
+- Product 主线与 phase2 相关脚本完成 Python 3.9 注解兼容处理，避免正式环境因 `X | None` 语法报错。
+- `orchestrate_collection.py`、`websearch_adapter.py`、`call_internal_proxy.py`、`merge_evidence_collection_outputs.py` 新增阶段性 stderr 日志与 `summary_text` 输出，降低 skill 执行黑盒感。
+- `build_web_source_plan.py`、`call_map_vendor.py`、`write_map_relevance_review.py`、`write_evidence_output.py` 也补齐了同样的白盒输出，确保单步执行时日志同样可读。
+
 ## [1.10.2] - 2026-04-01
 ### Added
 - authority 灰区新增二阶段模型裁决入口：`decision seed.authority_model_judgment`，并对候选码集合做强约束校验。

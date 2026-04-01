@@ -24,6 +24,11 @@ from evidence_collection_common import (
 )
 
 
+def log_progress(message: str) -> None:
+    sys.stderr.write(f"[build-web-plan] {message}\n")
+    sys.stderr.flush()
+
+
 def new_web_plan_item(poi: dict, source: dict) -> dict:
     host_info = get_url_host_info(str(source.get("url", "")))
     query = normalize_whitespace(f"{poi['city']} {poi['name']} {source.get('name', '')}")
@@ -54,6 +59,7 @@ def main() -> int:
     for field in ("id", "name", "poi_type", "city"):
         if not normalize_whitespace(poi.get(field)):
             raise ValueError(f"input.{field} is required")
+    log_progress(f"开始生成检索计划: poi_id={poi['id']} name={poi['name']} poi_type={poi['poi_type']}")
 
     repo_root = SCRIPT_DIR.parent.parent
     mapping_path = repo_root / "skills-bigpoi-verification" / "config" / "poi_type_mapping.yaml"
@@ -111,7 +117,13 @@ def main() -> int:
         "config_category": config_name,
         "official_count": len(official_sources),
         "internet_count": len(internet_sources),
+        "summary_text": (
+            f"检索计划生成完成：类目={config_name}，"
+            f"官方源 {len(official_sources)} 个，"
+            f"互联网源 {len(internet_sources)} 个。"
+        ),
     }
+    log_progress(result["summary_text"])
     json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
     return 0

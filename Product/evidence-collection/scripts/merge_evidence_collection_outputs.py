@@ -33,6 +33,11 @@ from evidence_collection_common import (
 VENDORS = ("amap", "bmap", "qmap")
 
 
+def log_progress(message: str) -> None:
+    sys.stderr.write(f"[merge-evidence] {message}\n")
+    sys.stderr.flush()
+
+
 def main() -> int:
     ensure_stdout_utf8()
     parser = argparse.ArgumentParser()
@@ -72,6 +77,7 @@ def main() -> int:
         resolved_task_id = str(internal_context.get("task_id") or "").strip()
     if not isinstance(internal_payload, dict) or not isinstance(internal_payload.get("vendors"), dict):
         raise ValueError("internal proxy output must contain vendors")
+    log_progress("开始归并各分支证据")
 
     for vendor in VENDORS:
         vendor_payload = internal_payload["vendors"].get(vendor)
@@ -193,7 +199,15 @@ def main() -> int:
         "run_id": resolved_run_id,
         "evidence_count": len(final_evidence),
         "final_missing_vendors": final_missing_vendors,
+        "summary_text": (
+            "证据归并完成："
+            f"map_vendor={source_type_distribution['map_vendor']}，"
+            f"official={source_type_distribution['official']}，"
+            f"internet={source_type_distribution['internet']}，"
+            f"总计={len(final_evidence)}。"
+        ),
     }
+    log_progress(result["summary_text"])
     json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
     return 0
