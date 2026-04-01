@@ -60,6 +60,8 @@ The following files are local helper modules for internal `import` only. Do not 
    - `decision.dimensions` 必须明确区分 `address` 与 `coordinates` 两个维度
    - `decision seed` 必须由上游显式写入 `address` 与 `coordinates`，不允许只提供 `location`
    - 如需保留 `location`，只能作为兼容汇总维度，不能代替前两者
+   - authority 分类修正以 `verification` 输出为准，不在父技能中二次猜码
+   - `manual_review` / `downgraded` 属于合法正式 `decision`，父技能不得因该状态判定子技能失败
 5. 运行以下脚本生成最终输出包：
 
 ```bash

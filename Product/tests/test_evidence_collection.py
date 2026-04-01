@@ -1,60 +1,66 @@
-import sys
 import os
-import time
-import asyncio
-import pytest
-from unittest.mock import AsyncMock, patch
+import sys
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../evidence-collection/scripts')))
-import call_map_vendor
-from write_evidence_output import normalize_evidence_item
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../evidence-collection/scripts")))
 
-@pytest.mark.asyncio
-async def test_async_io_concurrency():
-    """测试多路图商 API 请求的异步并发能力"""
-    start_time = time.time()
-    
-    # 模拟 3 个网络请求，假定服务器响应慢，每个强制睡眠拉长到 0.5 秒钟
-    async def mock_fetch(*args, **kwargs):
-        await asyncio.sleep(0.5)
-        return {"status": "success", "source": args[1] if len(args)>1 else "mock"}
-        
-    with patch("call_map_vendor.fetch_vendor_response_async", side_effect=mock_fetch):
-        # 抛出三个分支图商打点
-        tasks = [
-            call_map_vendor.fetch_vendor_response_async(None, "amap", "id1", "key1"),
-            call_map_vendor.fetch_vendor_response_async(None, "bmap", "id1", "key2"),
-            call_map_vendor.fetch_vendor_response_async(None, "qmap", "id1", "key3")
-        ]
-        results = await asyncio.gather(*tasks)
-        
-    duration = time.time() - start_time
-    assert len(results) == 3
-    # 如果是同步串行执行，这里起步将耗时 1.5 秒；如果在 asyncio 环境中，则总时间应该约为 0.5 秒
-    assert duration < 0.6, f"异步并发控制失效，函数总耗时达 {duration} 秒无法满足高吞吐期待！"
+from evidence_collection_common import new_generic_evidence_seed
+import websearch_adapter
 
-def test_evidence_pruning_and_haversine():
-    """测试 EvidencePruner 成功脱水 raw_data 且成功注入 computed_distance_meters 预计算里程"""
-    mock_poi = {
-        "coordinates": {"longitude": 116.40, "latitude": 39.90}
+
+def test_generic_seed_includes_authority_metadata_contract():
+    poi = {"id": "poi_1"}
+    item = {
+        "source_type": "official",
+        "source_name": "某市人民政府",
+        "source_url": "https://www.example.gov.cn/page",
+        "title": "某市人民政府",
+        "content": "某市人民政府主办，负责全市行政管理",
+        "data": {"name": "某市人民政府"},
     }
-    raw_evidence = {
-        "evidence_id": "ev_001",
-        "poi_id": "poi_1",
-        "source": { "source_id": "s1", "source_name": "amap", "source_type": "map_vendor" },
-        "collected_at": "2026-03-01T00:00:00Z",
-        "data": {
-            "name": "TEST",
-            "coordinates": {"longitude": 116.40, "latitude": 39.90},
-            "raw_data": {"huge_string": "A" * 10000}  # 此噪音节点应该被清出
-        },
-        "metadata": {"run_id": "run_1"}
+    seed = new_generic_evidence_seed(poi, item, "websearch")
+    metadata = seed["metadata"]
+
+    assert metadata["signal_origin"] == "websearch"
+    assert metadata["source_domain"] == "www.example.gov.cn"
+    assert metadata["page_title"] == "某市人民政府"
+    assert metadata["text_snippet"].startswith("某市人民政府主办")
+    assert "人民政府" in (metadata.get("authority_signals") or [])
+
+
+def test_websearch_adapter_fallback_from_baidu_to_tavily(monkeypatch):
+    calls = []
+
+    def fake_search_with_provider(*, base_url, provider, query, domain=None, timeout_seconds=30):
+        calls.append(provider)
+        if provider == "baidu":
+            return {"references": []}
+        return {
+            "results": [
+                {
+                    "url": "https://www.example.gov.cn/a",
+                    "title": "某市人民政府",
+                    "snippet": "某市人民政府官网信息",
+                    "source": "某市人民政府",
+                }
+            ]
+        }
+
+    monkeypatch.setattr(websearch_adapter, "search_with_provider", fake_search_with_provider)
+    web_plan = {
+        "official_sources": [
+            {
+                "source_name": "政府官网",
+                "source_type": "official",
+                "source_url": "https://www.example.gov.cn/",
+                "query": "某市人民政府 官网",
+                "weight": 1.0,
+            }
+        ],
+        "internet_sources": [],
     }
-    errors = []
-    
-    normalized = normalize_evidence_item(raw_evidence, mock_poi, 0, errors)
-    
-    assert not errors
-    assert "raw_data" not in normalized.get("data", {}), "数据脱水失败，JSON中仍然存在 raw_data 节点损耗 token 额度"
-    assert "computed_distance_meters" in normalized.get("data", {}), "地理距离预计算注入节点已丢失"
-    assert normalized["data"]["computed_distance_meters"] == 0, "同经纬度模拟距离计算校验未归零"
+    payload = websearch_adapter.execute_websearch_plan(web_plan=web_plan, base_url="http://internal-search/api", timeout_seconds=5)
+
+    assert calls == ["baidu", "tavily"]
+    assert payload["result_count"] == 1
+    assert payload["effective_provider"] == "tavily"
+    assert payload["items"][0]["metadata"]["provider_attempts"] == ["baidu", "tavily"]

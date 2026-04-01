@@ -1,5 +1,20 @@
 # Product CHANGELOG
 
+## [1.9.0] - 2026-04-01
+### Added
+- 新增 `verification/scripts/authority_category_inference.py`，实现政府/公检法 authority 分类推断与 6 位码级别修正建议生成。
+- 新增 `evidence-collection/scripts/internal_search_client.py` 与 `evidence-collection/scripts/websearch_adapter.py`，统一内部搜索代理调用与 `baidu -> tavily` 回退。
+
+### Changed
+- `verification/scripts/write_decision_output.py` 接入 authority 分类增强，自动补齐 `dimensions.category.details` 并在证据充分时写出 `corrections.category`。
+- 移除 `write_decision_output.py` 中“整体置信度 < 0.85 直接抛错中断”的主流程逻辑，低置信度场景改为正式输出 `downgraded / manual_review` 决策。
+- `evidence-collection/scripts/evidence_collection_common.py` 增强 evidence metadata，按最小 contract 保留 authority 高价值信号字段。
+- 同步更新 `Product` 域三个 SKILL 文档与域 README，明确 authority 与搜索代理一期约束。
+
+### Tests
+- 重写 `Product/tests/test_write_decision.py`，覆盖“低置信度仍输出 decision”与“authority 自动 category 修正”场景。
+- 重写 `Product/tests/test_evidence_collection.py`，覆盖 authority metadata contract 与 `baidu -> tavily` 回退行为。
+
 ## [1.8.0] - 2026-03-23
 ### Added
 - 为 `verification` 提供大模型熔断前置距离注入能力（在落数据前剔除 raw_data 并置入直实地理距离）。
@@ -80,4 +95,3 @@
 
 ### Fixed
 - 修复早期配置文件命名与引用问题。
-

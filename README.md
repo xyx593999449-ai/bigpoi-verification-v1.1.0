@@ -49,7 +49,7 @@ flowchart TD
     DB["PostgreSQL 库"] --> |"Batch 推流"| Q["Celery Redis 消息队列"]
     Q --> |"Worker 并发消费"| A["Develop: celery_worker"]
     A --> B["Product: evidence-collection (AsyncIO 并发取证 & 脱水)"]
-    B --> C["Product: verification (含大模型 Fallback 路由机制)"]
+    B --> C["Product: verification (authority 分类增强与低置信度结构化降级)"]
     C --> D["Product: skills-bigpoi-verification (包裹成结果包)"]
     D --> E["Product: write-pg-verified"]
     D --> |"动态概率抽检"| F["Quality: BigPoi-verification-qc (纯代码 0-Token 质检引擎)"]
@@ -69,3 +69,8 @@ flowchart TD
 - Product 侧新增脚本、schema、配置时，先更新 `Product/README.md` 与 `Product/CHANGELOG.md`。
 - Quality 侧新增规则、schema、回库字段时，先更新 `Quality/README.md` 与对应技能文档。
 - 涉及跨域流程变更时，同时更新本文件和受影响域的 CHANGELOG。
+
+## 7. 最近迭代提醒（2026-04-01）
+
+- Product `evidence-collection` 已新增内部搜索代理适配层，`websearch` 默认执行 `baidu -> tavily` 回退策略。
+- Product `verification` 已移除低置信度硬中断，authority 场景改为正式输出 `manual_review / downgraded`。

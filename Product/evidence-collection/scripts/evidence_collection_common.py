@@ -356,6 +356,7 @@ def new_map_vendor_evidence_seed(poi: dict[str, Any], source: str, item: dict[st
     if isinstance(item.get("raw_data"), dict):
         data["raw_data"] = item["raw_data"]
 
+    authority_signals = collect_authority_signals((item.get("name"), item.get("category"), item.get("address")))
     return {
         "poi_id": str(poi["id"]),
         "source": {
@@ -375,6 +376,11 @@ def new_map_vendor_evidence_seed(poi: dict[str, Any], source: str, item: dict[st
             "collection_method": "api",
             "collection_branch": branch,
             "map_source": source,
+            "signal_origin": "map_vendor",
+            "source_domain": extract_source_domain(definition["url"]),
+            "page_title": limit_text(item.get("name"), 120),
+            "text_snippet": limit_text(item.get("category") or item.get("address")),
+            "authority_signals": authority_signals or None,
         },
     }
 
@@ -428,6 +434,33 @@ def new_generic_evidence_seed(poi: dict[str, Any], item: dict[str, Any], branch:
         }
 
     metadata = dict(item.get("metadata") if isinstance(item.get("metadata"), dict) else {})
+    metadata.setdefault("signal_origin", infer_signal_origin(branch))
+    metadata.setdefault("source_domain", extract_source_domain(source_url))
+    metadata.setdefault("page_title", limit_text(item.get("title") or item.get("page_title"), 120))
+    metadata.setdefault(
+        "text_snippet",
+        limit_text(
+            item.get("content")
+            or item.get("snippet")
+            or data_input.get("text_snippet")
+            or data_input.get("address")
+            or data_input.get("category")
+        ),
+    )
+    metadata.setdefault("level_hint", normalize_level_hint(data_input.get("level_hint") or metadata.get("level_hint") or item.get("level_hint")))
+    metadata.setdefault(
+        "authority_signals",
+        collect_authority_signals(
+            (
+                data_input.get("name"),
+                data_input.get("category"),
+                data_input.get("address"),
+                metadata.get("page_title"),
+                metadata.get("text_snippet"),
+            )
+        )
+        or None,
+    )
     metadata["collection_branch"] = branch
     if "collection_method" not in metadata:
         metadata["collection_method"] = "crawl" if branch == "webfetch" else "manual"
@@ -574,6 +607,72 @@ def get_url_host_info(url: str | None) -> dict[str, Any]:
     return result
 
 
+def extract_source_domain(url: str | None) -> str | None:
+    host_info = get_url_host_info(url)
+    host = normalize_whitespace(host_info.get("host"))
+    return host.lower() if host else None
+
+
+def limit_text(value: Any, limit: int = 280) -> str | None:
+    text = normalize_text(value)
+    if not text:
+        return None
+    return text[:limit]
+
+
+def normalize_level_hint(value: Any) -> str | None:
+    text = normalize_text(value)
+    if not text:
+        return None
+    mapping = {
+        "国家级": ("国务院", "国家级"),
+        "省级": ("省级", "自治区级", "直辖市级", "省人民政府", "自治区人民政府"),
+        "地市级": ("地市级", "市级", "市人民政府"),
+        "区县级": ("区县级", "区级", "县级", "区人民政府", "县人民政府"),
+        "乡镇级": ("乡镇级", "乡级", "镇级", "乡人民政府", "镇人民政府"),
+        "乡镇以下级": ("乡镇以下级", "街道", "社区", "村委", "居委"),
+    }
+    for level_label, keys in mapping.items():
+        if any(key in text for key in keys):
+            return level_label
+    return None
+
+
+def collect_authority_signals(values: Iterable[Any]) -> list[str]:
+    keywords = (
+        "人民政府",
+        "国务院",
+        "公安局",
+        "派出所",
+        "人民检察院",
+        "检察院",
+        "人民法院",
+        "中级人民法院",
+        "高级人民法院",
+        "基层人民法院",
+        "街道办事处",
+        "居民委员会",
+        "村民委员会",
+        "乡人民政府",
+        "镇人民政府",
+    )
+    merged_text = " ".join(text for text in (normalize_text(value) for value in values) if text)
+    if not merged_text:
+        return []
+    return [keyword for keyword in keywords if keyword in merged_text]
+
+
+def infer_signal_origin(branch: str | None) -> str:
+    mapping = {
+        "websearch": "websearch",
+        "webfetch": "webfetch",
+        "map_vendor": "map_vendor",
+        "internal_proxy": "map_vendor",
+        "vendor_fallback": "map_vendor",
+    }
+    return mapping.get(str(branch or "").strip(), "websearch")
+
+
 def to_item_array(value: Any) -> list[Any]:
     if value is None:
         return []
@@ -710,12 +809,16 @@ def get_common_config_lines(config_path: str | Path | None = None) -> list[str]:
 
 
 def get_internal_proxy_config(config_path: str | Path | None = None) -> dict[str, Any]:
+    return get_named_section_config("internal_proxy", config_path=config_path)
+
+
+def get_named_section_config(section_name: str, config_path: str | Path | None = None) -> dict[str, Any]:
     lines = get_common_config_lines(config_path)
     in_section = False
     config: dict[str, Any] = {}
     for line in lines:
         if not in_section:
-            if re.match(r'^\s*internal_proxy:\s*$', line):
+            if re.match(rf'^\s*{re.escape(section_name)}:\s*$', line):
                 in_section = True
             continue
         if re.match(r'^\S', line):
@@ -727,6 +830,10 @@ def get_internal_proxy_config(config_path: str | Path | None = None) -> dict[str
         raw_value = _clean_yaml_value(match.group(2))
         config[key] = convert_yaml_scalar(raw_value)
     return config
+
+
+def get_internal_search_config(config_path: str | Path | None = None) -> dict[str, Any]:
+    return get_named_section_config("internal_search", config_path=config_path)
 
 
 def get_vendor_credentials(source: str, config_path: str | Path | None = None) -> list[dict[str, str]]:

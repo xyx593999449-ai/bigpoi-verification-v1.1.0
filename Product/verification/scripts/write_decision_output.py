@@ -14,6 +14,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from run_context import collect_item_run_ids, require_context
+from authority_category_inference import infer_authority_category
 
 
 ALLOWED_CORRECTION_FIELDS = ("name", "address", "coordinates", "category", "city", "city_adcode")
@@ -76,7 +77,7 @@ def read_json_file(path: str | Path):
 def write_json_file(data, path: str | Path) -> None:
     file_path = Path(path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
-    file_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+    file_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def is_iso_time(value: str) -> bool:
@@ -440,6 +441,34 @@ def get_summary(status: str, confidence: float, dimensions: dict, corrections: d
     return f"\u9700\u8981\u4eba\u5de5\u590d\u6838\uff0c\u7efc\u5408\u7f6e\u4fe1\u5ea6{confidence_text}\u3002"
 
 
+def apply_authority_category_enhancement(poi: dict, evidence: list[dict], dimensions: dict, corrections: dict) -> tuple[dict, dict]:
+    inference = infer_authority_category(poi, evidence)
+    if not inference:
+        return dimensions, corrections
+
+    output_dimensions = dict(dimensions)
+    category_dimension = clone_dimension(output_dimensions.get("category", {}))
+    category_dimension["result"] = inference["result"]
+    category_dimension["confidence"] = float(inference["confidence"])
+    details = dict(category_dimension.get("details") if isinstance(category_dimension.get("details"), dict) else {})
+    details.update(inference.get("details") if isinstance(inference.get("details"), dict) else {})
+    category_dimension["details"] = prune_empty(details)
+    if isinstance(inference.get("details"), dict) and isinstance(inference["details"].get("evidence_refs"), list):
+        category_dimension["evidence_refs"] = inference["details"]["evidence_refs"]
+    output_dimensions["category"] = category_dimension
+
+    output_corrections = dict(corrections)
+    selected_code = str(inference.get("selected_code") or "").strip()
+    if inference["result"] == "fail" and selected_code and selected_code != str(poi.get("poi_type")) and "category" not in output_corrections:
+        output_corrections["category"] = {
+            "original": str(poi.get("poi_type")),
+            "suggested": selected_code,
+            "reason": str((inference.get("details") or {}).get("reason") or "authority 分类修正"),
+            "confidence": float(inference["confidence"]),
+        }
+    return output_dimensions, output_corrections
+
+
 def main() -> int:
     ensure_stdout_utf8()
     parser = argparse.ArgumentParser()
@@ -501,13 +530,9 @@ def main() -> int:
     created_at = timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     overall_seed = seed.get("overall") if isinstance(seed.get("overall"), dict) else {}
+    dimensions, normalized_corrections = apply_authority_category_enhancement(poi, evidence, dimensions, normalized_corrections)
     overall_confidence = float(overall_seed.get("confidence", measure_overall_confidence(dimensions)))
-    
-    # [Sub-Agent 3 改造核心: Fallback 路由网关]
-    if overall_confidence < 0.85:
-        # 当模型结论置信度低于 85% 时，停止写入正式决策，反向通知外层 Worker / Orchestrator 进行模型升格。
-        raise ValueError(f"[ModelRouteFallback] 识别到当前的决策总体置信度仅为 {overall_confidence:.2f} (< 0.85)，触发阈值熔断。请外壳程序或子 Agent 将此上下文重路由给高阶大模型 (如 Claude-3.5-Sonnet) 并重试本环节。")
-    
+
     status = str(overall_seed.get("status", infer_status(dimensions, overall_confidence)))
     action = str(overall_seed.get("action", get_action(status)))
     summary = get_summary(status, overall_confidence, dimensions, normalized_corrections)

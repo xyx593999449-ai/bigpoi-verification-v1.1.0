@@ -26,6 +26,7 @@ Use the following executable entry script:
 The following file is a local helper module for internal `import` only. Do not execute it directly:
 
 - `verification/scripts/run_context.py`
+- `verification/scripts/authority_category_inference.py`
 禁止行为：
 
 - 直接手写最终 `decision_*.json`
@@ -66,6 +67,12 @@ The following file is a local helper module for internal `import` only. Do not e
 5. 只有证据足够时才补充：
    - `administrative`
    - `timeliness`
+6. 对 authority 类（`government / police / procuratorate / court`）必须执行类型码推断增强：
+   - 基于输入 POI + 正式 `evidence_*.json`
+   - 优先综合 `official > internet > map_vendor` 信号
+   - 输出 `dimensions.category.details`，包含 `institution_family`、`level_label`、`evidence_refs`、`source_breakdown`
+   - 与输入 `poi_type` 冲突且证据充分时写入 `corrections.category`
+7. authority 低置信度场景也必须写出正式 `decision_*.json`，通过 `uncertain / downgraded / manual_review` 表达不确定性，不允许直接抛错中断。
 4. 先写一个精简的 `decision seed` 中间文件，内容只放这些字段：
    - `dimensions`
    - 可选 `overall`
@@ -101,6 +108,8 @@ python verification/scripts/write_decision_output.py -PoiPath <input.json> -Evid
 - `evidence_refs` 只能引用 evidence 文件中真实存在的 `evidence_id`
 - `overall.status` 只能是 `accepted | downgraded | manual_review | rejected`
 - 如果不提供 `overall`，脚本会根据维度结果自动推导
+- authority 场景允许 `dimensions.category.result = uncertain`
+- `manual_review` 与 `downgraded` 属于合法正式产物，不属于失败
 
 ## Failure handling
 

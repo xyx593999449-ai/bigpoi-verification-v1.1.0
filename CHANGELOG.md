@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.0] - 2026-04-01
+
+### Added
+- Product 域新增 authority 分类推断模块与内部搜索代理适配模块（`websearch_adapter` / `internal_search_client`）。
+
+### Changed
+- Product 核验链路移除“低置信度即中断”的默认行为，改为结构化降级并持续产出正式 `decision`。
+- Product 证据规范化补齐 authority 相关 metadata 最小 contract，支持后续码级分类判断。
+- 同步更新 Product 域技能文档与仓库级 README/CHANGELOG 的流程描述。
+
 ## [1.2.0] - 2026-03-23
 
 ### Added

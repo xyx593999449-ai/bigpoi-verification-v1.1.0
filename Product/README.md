@@ -28,6 +28,7 @@
 ### 4.1 evidence-collection
 
 - `evidence-collection/scripts/build_web_source_plan.py`
+- `evidence-collection/scripts/websearch_adapter.py`
 - `evidence-collection/scripts/call_internal_proxy.py`
 - `evidence-collection/scripts/call_map_vendor.py`
 - `evidence-collection/scripts/write_map_relevance_review.py`
@@ -37,6 +38,7 @@
 ### 4.2 verification
 
 - `verification/scripts/write_decision_output.py`
+- `verification/scripts/authority_category_inference.py`（authority 分类增强模块，供 `write_decision_output.py` 内部调用）
 
 ### 4.3 skills-bigpoi-verification
 
@@ -73,3 +75,9 @@
 - 涉及 schema、阈值、回库映射变更时，同时更新对应技能 README / SKILL。
 - 涉及 `Product/verification/rules/**/README.md` 的规则说明变更时，也应同步回看本文件是否需要更新入口描述。
 - 新增文档前先备份旧版本到 `docs/backups/`。
+
+## 9. 一期 authority 与搜索代理策略（2026-04）
+
+- `websearch` 分支统一走 `websearch_adapter.py`，固定 `baidu -> tavily` 回退顺序，输出可直接归并的 `items` 结构。
+- 正式 evidence 在 `metadata` 最小保留 authority 高价值字段：`signal_origin`、`source_domain`、`page_title`、`text_snippet`、`level_hint`、`authority_signals`。
+- authority 类目（政府、公检法）在 `verification` 阶段进行 6 位码推断增强，低置信度场景也必须产出正式 `decision`，不再因为置信度阈值中断。
