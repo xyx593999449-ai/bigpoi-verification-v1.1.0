@@ -65,6 +65,22 @@ def collect_missing_vendors(internal_proxy_path: Union[str, Path]) -> List[str]:
     return []
 
 
+def count_map_candidates(payload: Dict[str, Any]) -> int:
+    if not isinstance(payload, dict):
+        return 0
+    vendors = payload.get("vendors") if isinstance(payload.get("vendors"), dict) else None
+    if vendors is not None:
+        return sum(
+            len(vendor_payload.get("items") or [])
+            for vendor_payload in vendors.values()
+            if isinstance(vendor_payload, dict) and isinstance(vendor_payload.get("items"), list)
+        )
+    items = payload.get("items")
+    if isinstance(items, list):
+        return len([item for item in items if isinstance(item, dict)])
+    return 0
+
+
 def should_fail_websearch_branch(returncode: int, result_payload: Dict[str, Any]) -> bool:
     if returncode == 0:
         return False
@@ -119,6 +135,36 @@ def apply_map_review(
     return run_json_command(review_cmd, label="write_map_relevance_review", retries=retry_count)
 
 
+def apply_websearch_review(
+    *,
+    py: str,
+    raw_websearch_path: Union[str, Path],
+    review_seed_path: str,
+    output_path: Union[str, Path],
+    poi_id: str,
+    run_id: str,
+    task_id: Optional[str],
+    retry_count: int,
+) -> Dict[str, Any]:
+    review_cmd = [
+        py,
+        str(SCRIPT_DIR / "write_websearch_review.py"),
+        "-WebSearchRawPath",
+        str(raw_websearch_path),
+        "-ReviewSeedPath",
+        review_seed_path,
+        "-OutputPath",
+        str(output_path),
+        "-PoiId",
+        poi_id,
+        "-RunId",
+        run_id,
+    ]
+    if task_id:
+        review_cmd.extend(["-TaskId", task_id])
+    return run_json_command(review_cmd, label="write_websearch_review", retries=retry_count)
+
+
 def main() -> int:
     ensure_stdout_utf8()
     parser = argparse.ArgumentParser()
@@ -130,6 +176,7 @@ def main() -> int:
     parser.add_argument("-CommonConfigPath")
     parser.add_argument("-RetryCount", type=int, default=1)
     parser.add_argument("-InternalReviewSeedPath")
+    parser.add_argument("-WebSearchReviewSeedPath")
     parser.add_argument("-VendorReviewSeedPaths", nargs="*")
     args = parser.parse_args()
 
@@ -146,9 +193,12 @@ def main() -> int:
 
     web_plan_path = process_dir / "web-plan.json"
     internal_proxy_path = process_dir / "map-raw-internal-proxy.json"
+    internal_review_input_path = process_dir / "map-review-input-internal-proxy.json"
     internal_reviewed_path = process_dir / "map-reviewed-internal-proxy.json"
     websearch_path = process_dir / "websearch-raw.json"
     websearch_debug_path = process_dir / "websearch-debug.json"
+    websearch_review_input_path = process_dir / "websearch-review-input.json"
+    websearch_reviewed_path = process_dir / "websearch-reviewed.json"
     collector_merged_path = process_dir / "collector-merged.json"
 
     py = sys.executable
@@ -236,7 +286,37 @@ def main() -> int:
 
     review_outputs: Dict[str, str] = {}
     internal_merge_input_path = str(internal_proxy_path)
-    if args.InternalReviewSeedPath:
+    internal_review_input_cmd = [
+        py,
+        str(SCRIPT_DIR / "prepare_map_review_input.py"),
+        "-PoiPath",
+        str(args.PoiPath),
+        "-RawMapPath",
+        str(internal_proxy_path),
+        "-OutputPath",
+        str(internal_review_input_path),
+        "-RunId",
+        str(args.RunId),
+    ]
+    if args.TaskId:
+        internal_review_input_cmd.extend(["-TaskId", str(args.TaskId)])
+    run_json_command(internal_review_input_cmd, label="prepare_map_review_input[internal]", retries=retry_count)
+    internal_payload = load_json(internal_proxy_path)
+    if count_map_candidates(internal_payload) > 0:
+        if not args.InternalReviewSeedPath:
+            raise RuntimeError(
+                "internal map review seed is required before merge. "
+                f"review_input_path={internal_review_input_path}"
+            )
+        validate_internal_review_cmd = [
+            py,
+            str(SCRIPT_DIR / "validate_map_review_seed.py"),
+            "-MapReviewInputPath",
+            str(internal_review_input_path),
+            "-ReviewSeedPath",
+            str(args.InternalReviewSeedPath),
+        ]
+        run_json_command(validate_internal_review_cmd, label="validate_map_review_seed[internal]", retries=retry_count)
         apply_map_review(
             py=py,
             raw_map_path=internal_proxy_path,
@@ -256,6 +336,7 @@ def main() -> int:
     for vendor in missing_vendors:
         log_progress(f"图商缺失补采: {vendor}")
         fallback_path = process_dir / f"map-raw-fallback-{vendor}.json"
+        fallback_review_input_path = process_dir / f"map-review-input-fallback-{vendor}.json"
         reviewed_fallback_path = process_dir / f"map-reviewed-fallback-{vendor}.json"
         fallback_cmd = [
             py,
@@ -278,8 +359,44 @@ def main() -> int:
         if args.CommonConfigPath:
             fallback_cmd.extend(["-CommonConfigPath", str(args.CommonConfigPath)])
         run_json_command(fallback_cmd, label=f"call_map_vendor[{vendor}]", retries=retry_count)
-        merge_input_path = str(fallback_path)
+        fallback_payload = load_json(fallback_path)
+        if count_map_candidates(fallback_payload) <= 0:
+            continue
+
+        prepare_fallback_review_cmd = [
+            py,
+            str(SCRIPT_DIR / "prepare_map_review_input.py"),
+            "-PoiPath",
+            str(args.PoiPath),
+            "-RawMapPath",
+            str(fallback_path),
+            "-OutputPath",
+            str(fallback_review_input_path),
+            "-RunId",
+            str(args.RunId),
+        ]
+        if args.TaskId:
+            prepare_fallback_review_cmd.extend(["-TaskId", str(args.TaskId)])
+        run_json_command(prepare_fallback_review_cmd, label=f"prepare_map_review_input[{vendor}]", retries=retry_count)
+
         review_seed_path = vendor_review_seed_paths.get(vendor)
+        if not review_seed_path:
+            raise RuntimeError(
+                f"vendor fallback review seed is required before merge: vendor={vendor} "
+                f"review_input_path={fallback_review_input_path}"
+            )
+
+        validate_fallback_review_cmd = [
+            py,
+            str(SCRIPT_DIR / "validate_map_review_seed.py"),
+            "-MapReviewInputPath",
+            str(fallback_review_input_path),
+            "-ReviewSeedPath",
+            str(review_seed_path),
+        ]
+        run_json_command(validate_fallback_review_cmd, label=f"validate_map_review_seed[{vendor}]", retries=retry_count)
+
+        merge_input_path = str(fallback_path)
         if review_seed_path:
             apply_map_review(
                 py=py,
@@ -296,6 +413,51 @@ def main() -> int:
             log_progress(f"补采图商 {vendor} 已完成相关性过滤")
         vendor_fallback_paths.append(merge_input_path)
 
+    websearch_merge_input_path: Optional[str] = None
+    if int(websearch_result.get("result_count") or 0) > 0:
+        prepare_websearch_cmd = [
+            py,
+            str(SCRIPT_DIR / "prepare_websearch_review_input.py"),
+            "-PoiPath",
+            str(args.PoiPath),
+            "-WebSearchRawPath",
+            str(websearch_path),
+            "-OutputPath",
+            str(websearch_review_input_path),
+            "-RunId",
+            str(args.RunId),
+        ]
+        if args.TaskId:
+            prepare_websearch_cmd.extend(["-TaskId", str(args.TaskId)])
+        run_json_command(prepare_websearch_cmd, label="prepare_websearch_review_input", retries=retry_count)
+        if not args.WebSearchReviewSeedPath:
+            raise RuntimeError(
+                "websearch review seed is required before merge. "
+                f"review_input_path={websearch_review_input_path}"
+            )
+        validate_websearch_cmd = [
+            py,
+            str(SCRIPT_DIR / "validate_websearch_review_seed.py"),
+            "-WebSearchReviewInputPath",
+            str(websearch_review_input_path),
+            "-ReviewSeedPath",
+            str(args.WebSearchReviewSeedPath),
+        ]
+        run_json_command(validate_websearch_cmd, label="validate_websearch_review_seed", retries=retry_count)
+        apply_websearch_review(
+            py=py,
+            raw_websearch_path=websearch_path,
+            review_seed_path=str(args.WebSearchReviewSeedPath),
+            output_path=websearch_reviewed_path,
+            poi_id=str(poi["id"]),
+            run_id=str(args.RunId),
+            task_id=str(args.TaskId) if args.TaskId else None,
+            retry_count=retry_count,
+        )
+        websearch_merge_input_path = str(websearch_reviewed_path)
+        review_outputs["websearch"] = str(websearch_reviewed_path)
+        log_progress("websearch 候选已完成结构化 review")
+
     merge_cmd = [
         py,
         str(SCRIPT_DIR / "merge_evidence_collection_outputs.py"),
@@ -303,8 +465,6 @@ def main() -> int:
         str(args.PoiPath),
         "-InternalProxyPath",
         internal_merge_input_path,
-        "-WebSearchPath",
-        str(websearch_path),
         "-OutputPath",
         str(collector_merged_path),
         "-RunId",
@@ -312,6 +472,8 @@ def main() -> int:
     ]
     if args.TaskId:
         merge_cmd.extend(["-TaskId", str(args.TaskId)])
+    if websearch_merge_input_path:
+        merge_cmd.extend(["-WebSearchPath", websearch_merge_input_path])
     if args.WebFetchPath:
         merge_cmd.extend(["-WebFetchPath", str(args.WebFetchPath)])
     if vendor_fallback_paths:
@@ -349,8 +511,11 @@ def main() -> int:
         "poi_id": str(poi["id"]),
         "web_plan_path": str(web_plan_path),
         "internal_proxy_path": str(internal_proxy_path),
+        "internal_review_input_path": str(internal_review_input_path),
         "internal_reviewed_path": review_outputs.get("internal_proxy"),
         "websearch_path": str(websearch_path),
+        "websearch_review_input_path": str(websearch_review_input_path) if websearch_merge_input_path else None,
+        "websearch_reviewed_path": review_outputs.get("websearch"),
         "websearch_debug_path": str(websearch_debug_path),
         "vendor_fallback_paths": vendor_fallback_paths,
         "review_outputs": review_outputs,

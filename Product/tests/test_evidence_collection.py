@@ -4,11 +4,16 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../evidence-collection/scripts")))
 
 from evidence_collection_common import new_generic_evidence_seed
 import websearch_adapter
 import internal_search_client
+import prepare_map_review_input
+import validate_map_review_seed
+import validate_websearch_review_seed
 import write_websearch_review
 
 FIXTURE_DIR = Path(__file__).resolve().parent
@@ -248,16 +253,19 @@ def test_write_websearch_review_outputs_mergeable_items(tmp_path: Path):
     }
     review_seed = {
         "items": [
-            {
-                "result_id": "WEB_001",
-                "is_relevant": True,
-                "confidence": 0.91,
-                "reason": "标题和摘要均指向目标政府机关",
-                "should_fetch": True,
-                "fetch_url": "http://www.baoan.gov.cn/xxgk/",
-                "extracted": {
-                    "name": "深圳市宝安区人民政府",
-                    "address": "深圳市宝安区创业一路1号",
+                {
+                    "result_id": "WEB_001",
+                    "is_relevant": True,
+                    "confidence": 0.91,
+                    "reason": "标题和摘要均指向目标政府机关",
+                    "source_type": "official",
+                    "entity_relation": "poi_body",
+                    "evidence_ready": True,
+                    "should_fetch": True,
+                    "fetch_url": "http://www.baoan.gov.cn/xxgk/",
+                    "extracted": {
+                        "name": "深圳市宝安区人民政府",
+                        "address": "深圳市宝安区创业一路1号",
                     "category_hint": "区县级政府",
                 },
             }
@@ -289,3 +297,114 @@ def test_write_websearch_review_outputs_mergeable_items(tmp_path: Path):
     assert reviewed["items"][0]["data"]["name"] == "深圳市宝安区人民政府"
     assert reviewed["items"][0]["metadata"]["should_fetch"] is True
     assert reviewed["items"][0]["metadata"]["fetch_url"] == "http://www.baoan.gov.cn/xxgk/"
+
+
+def test_prepare_map_review_input_compacts_candidates():
+    poi = {"id": "poi_1", "name": "西丽街道办事处", "poi_type": "130105", "city": "深圳市"}
+    raw_payload = {
+        "vendors": {
+            "amap": {
+                "vendor": "amap",
+                "source_name": "高德地图",
+                "requested_via": "internal_proxy",
+                "items": [
+                    {
+                        "vendor_item_id": "A1",
+                        "name": "西丽街道办事处",
+                        "address": "深圳市南山区留仙大道2015号",
+                        "category": "政府机构及社会团体;政府机关;乡镇级政府及事业单位",
+                        "coordinates": {"longitude": 113.95, "latitude": 22.57},
+                        "administrative": {"province": "广东省", "city": "深圳市", "district": "南山区"},
+                        "raw_data": {"very": "large"},
+                    }
+                ],
+            }
+        }
+    }
+
+    output = prepare_map_review_input.build_output(poi, raw_payload)
+    candidate = output["vendors"]["amap"]["candidates"][0]
+
+    assert candidate["candidate_key"] == "A1"
+    assert candidate["name"] == "西丽街道办事处"
+    assert "raw_data" not in candidate
+    assert "街道办事处" in candidate["authority_signals"]
+
+
+def test_validate_map_review_seed_rejects_partial_coverage():
+    candidate_catalog = {
+        "amap": [
+            {"candidate_key": "A1", "name": "西丽街道办事处"},
+            {"candidate_key": "A2", "name": "西丽街道办事处-北门"},
+        ]
+    }
+    review_seed = {
+        "vendors": {
+            "amap": {
+                "candidate_decisions": [
+                    {"candidate_key": "A1", "is_relevant": True, "reason": "主条目"},
+                ]
+            }
+        }
+    }
+
+    with pytest.raises(ValueError, match="missing candidate decisions"):
+        validate_map_review_seed.validate_map_review_seed_against_catalog(candidate_catalog, review_seed)
+
+
+def test_validate_websearch_review_seed_rejects_unstructured_relevant_items():
+    catalog = {
+        "WEB_001": {
+            "source_type": "official",
+            "source_url": "https://www.example.gov.cn",
+            "page_title": "示例页面",
+        }
+    }
+    review_seed = {
+        "items": [
+            {
+                "result_id": "WEB_001",
+                "is_relevant": True,
+                "confidence": 0.9,
+                "reason": "看起来相关",
+                "source_type": "official",
+                "entity_relation": "mention_only",
+                "evidence_ready": False,
+                "should_fetch": False,
+                "fetch_url": None,
+                "extracted": {},
+            }
+        ]
+    }
+
+    with pytest.raises(ValueError, match="extracted.name is required"):
+        validate_websearch_review_seed.validate_websearch_review_seed_against_catalog(catalog, review_seed)
+
+
+def test_validate_websearch_review_seed_rejects_non_poi_body_relevant_items():
+    catalog = {
+        "WEB_001": {
+            "source_type": "official",
+            "source_url": "https://www.example.gov.cn",
+            "page_title": "示例页面",
+        }
+    }
+    review_seed = {
+        "items": [
+            {
+                "result_id": "WEB_001",
+                "is_relevant": True,
+                "confidence": 0.82,
+                "reason": "正文里提到了目标机构",
+                "source_type": "official",
+                "entity_relation": "mention_only",
+                "evidence_ready": True,
+                "should_fetch": False,
+                "fetch_url": None,
+                "extracted": {"name": "某街道办事处"},
+            }
+        ]
+    }
+
+    with pytest.raises(ValueError, match="entity_relation must be poi_body"):
+        validate_websearch_review_seed.validate_websearch_review_seed_against_catalog(catalog, review_seed)

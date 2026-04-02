@@ -34,7 +34,8 @@ def read_json_file(path: Union[str, Path]) -> Any:
 def write_json_file(data: Any, path: Union[str, Path]) -> None:
     file_path = Path(path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
-    file_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+    with file_path.open("w", encoding="utf-8", newline="\n") as file_obj:
+        file_obj.write(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
 
 
 def utc_iso_now() -> str:

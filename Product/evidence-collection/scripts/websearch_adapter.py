@@ -192,11 +192,16 @@ def extract_structured_phone(snippet: Optional[str]) -> Optional[str]:
 
 def derive_result_name(title: Optional[str], target_name: Optional[str], query: str) -> Optional[str]:
     title_name = choose_best_title_part(title, target_name)
-    if title_name and any(keyword in title_name for keyword in AUTHORITY_KEYWORDS):
+    normalized_target = normalize_whitespace(target_name)
+    if title_name:
+        if normalized_target and title_name == normalized_target:
+            return normalized_target
+        if any(keyword in title_name for keyword in AUTHORITY_KEYWORDS):
+            return title_name
         return title_name
-    if normalize_whitespace(target_name):
-        return normalize_whitespace(target_name)
-    return title_name or normalize_whitespace(query)
+    if normalized_target and normalized_target in (normalize_whitespace(query) or ""):
+        return normalized_target
+    return None
 
 
 def normalize_websearch_item(result: Dict[str, Any], plan_source: Dict[str, Any], query: str, provider_attempts: List[str]) -> Dict[str, Any]:

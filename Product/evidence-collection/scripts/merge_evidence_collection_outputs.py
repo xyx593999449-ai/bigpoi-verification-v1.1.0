@@ -38,6 +38,25 @@ def log_progress(message: str) -> None:
     sys.stderr.flush()
 
 
+def is_reviewed_map_payload(payload: object) -> bool:
+    return isinstance(payload, dict) and normalize_whitespace(payload.get("reviewed_at")) is not None
+
+
+def map_payload_has_any_items(payload: object) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    if isinstance(payload.get("vendors"), dict):
+        return any(
+            isinstance(vendor_payload, dict) and isinstance(vendor_payload.get("items"), list) and bool(vendor_payload.get("items"))
+            for vendor_payload in payload["vendors"].values()
+        )
+    return isinstance(payload.get("items"), list) and bool(payload.get("items"))
+
+
+def is_reviewed_generic_payload(payload: object) -> bool:
+    return isinstance(payload, dict) and normalize_whitespace(payload.get("reviewed_at")) is not None and isinstance(payload.get("review_summary"), dict)
+
+
 def main() -> int:
     ensure_stdout_utf8()
     parser = argparse.ArgumentParser()
@@ -77,6 +96,8 @@ def main() -> int:
         resolved_task_id = str(internal_context.get("task_id") or "").strip()
     if not isinstance(internal_payload, dict) or not isinstance(internal_payload.get("vendors"), dict):
         raise ValueError("internal proxy output must contain vendors")
+    if map_payload_has_any_items(internal_payload) and not is_reviewed_map_payload(internal_payload):
+        raise ValueError("internal proxy path must point to map-reviewed payload; raw map payload cannot be merged directly")
     log_progress("开始归并各分支证据")
 
     for vendor in VENDORS:
@@ -107,6 +128,9 @@ def main() -> int:
         if not isinstance(payload, dict) or not normalize_whitespace(payload.get("vendor")):
             errors.append(f"vendor fallback output must contain vendor: {fallback_path}")
             continue
+        if map_payload_has_any_items(payload) and not is_reviewed_map_payload(payload):
+            errors.append(f"vendor fallback path must point to map-reviewed payload: {fallback_path}")
+            continue
         vendor = str(payload["vendor"])
         items = payload.get("items") if isinstance(payload.get("items"), list) else []
         branch_summary["vendor_fallback"][vendor] = len(items)
@@ -126,6 +150,8 @@ def main() -> int:
             resolved_run_id = str(websearch_context.get("run_id") or "").strip()
         if not resolved_task_id and websearch_context is not None:
             resolved_task_id = str(websearch_context.get("task_id") or "").strip()
+        if not is_reviewed_generic_payload(payload):
+            raise ValueError("websearch path must point to websearch-reviewed payload; raw websearch payload cannot be merged directly")
         items = get_generic_items(payload)
         branch_summary["websearch"] = len(items)
         for item in items:
@@ -142,6 +168,8 @@ def main() -> int:
             resolved_run_id = str(webfetch_context.get("run_id") or "").strip()
         if not resolved_task_id and webfetch_context is not None:
             resolved_task_id = str(webfetch_context.get("task_id") or "").strip()
+        if not is_reviewed_generic_payload(payload):
+            raise ValueError("webfetch path must point to reviewed payload; raw webfetch payload cannot be merged directly")
         items = get_generic_items(payload)
         branch_summary["webfetch"] = len(items)
         for item in items:

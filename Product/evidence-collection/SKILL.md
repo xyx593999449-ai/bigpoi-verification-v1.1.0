@@ -29,7 +29,10 @@ Use the following executable entry scripts:
 - `evidence-collection/scripts/websearch_adapter.py`
 - `evidence-collection/scripts/call_internal_proxy.py`
 - `evidence-collection/scripts/call_map_vendor.py`
+- `evidence-collection/scripts/prepare_map_review_input.py`
 - `evidence-collection/scripts/prepare_websearch_review_input.py`
+- `evidence-collection/scripts/validate_map_review_seed.py`
+- `evidence-collection/scripts/validate_websearch_review_seed.py`
 - `evidence-collection/scripts/write_map_relevance_review.py`
 - `evidence-collection/scripts/write_websearch_review.py`
 - `evidence-collection/scripts/build_webfetch_plan.py`
@@ -96,7 +99,26 @@ python evidence-collection/scripts/websearch_adapter.py -WebPlanPath <web-plan.j
 
 ### 3. 模型执行 review 节点
 
-- 图商线：模型读取 raw 候选，按 `prompts/map_relevance_review.md` 输出 `map-review-seed.json`
+- 图商线：
+  1. 先运行：
+
+```bash
+python evidence-collection/scripts/prepare_map_review_input.py -PoiPath <input.json> -RawMapPath <map-raw.json> -OutputPath <map-review-input.json> -RunId <run-id> -TaskId <task-id>
+```
+
+  2. 必须让子 agent / Task 只读取 `map-review-input.json`，按 `prompts/map_relevance_review.md` 输出 `map-review-seed.json`
+  3. 必须运行：
+
+```bash
+python evidence-collection/scripts/validate_map_review_seed.py -MapReviewInputPath <map-review-input.json> -ReviewSeedPath <map-review-seed.json>
+```
+
+  4. 校验通过后再运行：
+
+```bash
+python evidence-collection/scripts/write_map_relevance_review.py -RawMapPath <map-raw.json> -ReviewSeedPath <map-review-seed.json> -OutputPath <output/runs/{run_id}/process/map-reviewed.json> -PoiId <poi-id> -TaskId <task-id> -RunId <run-id>
+```
+
 - `websearch` 线：
   1. 先运行：
 
@@ -104,8 +126,14 @@ python evidence-collection/scripts/websearch_adapter.py -WebPlanPath <web-plan.j
 python evidence-collection/scripts/prepare_websearch_review_input.py -PoiPath <input.json> -WebSearchRawPath <websearch-raw.json> -OutputPath <websearch-review-input.json> -RunId <run-id> -TaskId <task-id>
 ```
 
-  2. 模型读取 `websearch-review-input.json`，按 `prompts/websearch_review_extract.md` 输出 `websearch-review-seed.json`
-  3. 再运行：
+  2. 必须让子 agent / Task 读取 `websearch-review-input.json`，按 `prompts/websearch_review_extract.md` 输出 `websearch-review-seed.json`
+  3. 必须运行：
+
+```bash
+python evidence-collection/scripts/validate_websearch_review_seed.py -WebSearchReviewInputPath <websearch-review-input.json> -ReviewSeedPath <websearch-review-seed.json>
+```
+
+  4. 校验通过后再运行：
 
 ```bash
 python evidence-collection/scripts/write_websearch_review.py -WebSearchRawPath <websearch-raw.json> -ReviewSeedPath <websearch-review-seed.json> -OutputPath <output/runs/{run_id}/process/websearch-reviewed.json> -PoiId <poi-id> -TaskId <task-id> -RunId <run-id>
@@ -113,7 +141,13 @@ python evidence-collection/scripts/write_websearch_review.py -WebSearchRawPath <
 
 强约束：
 
+- `map-review-seed.json` 与 `websearch-review-seed.json` 不能使用 `auto_generated` 或统一兜底全保留结果
+- 图商 review 必须逐条覆盖所有候选，不允许只给 `keep_candidates`
 - `websearch-reviewed.json` 必须已经是可直接归并的结构化结果
+- `websearch` 相关条目若 `is_relevant=true`，则必须已经有 `extracted.name`
+- `websearch` review 必须显式给出 `entity_relation`
+- 只有 `entity_relation=poi_body` 的 `websearch` 结果才允许进入 formal evidence
+- `mention_only / subordinate_org / same_region` 这类弱相关结果必须在 review 阶段剔除
 - `webfetch` 只做增强，不是 `websearch-reviewed` 成立的前置条件
 - 如果 `webfetch` 失败，必须继续使用 `websearch-reviewed` 往后执行
 
@@ -183,10 +217,7 @@ python evidence-collection/scripts/write_evidence_output.py -PoiPath <input.json
 
 ## Raw branch contract
 
-`websearch-reviewed` 和 `webfetch-reviewed` 分支必须输出 JSON 文件，允许两种顶层结构：
-
-- 证据数组
-- 含 `evidence_list`、`items` 或 `records` 的对象
+`websearch-reviewed` 和 `webfetch-reviewed` 分支必须输出带 `context` 的 JSON 对象，且对象内需包含 `items`、`evidence_list` 或 `records` 之一；不要只落一个裸数组。
 
 每条 item 至少要能归并出：
 
@@ -241,10 +272,11 @@ authority metadata 最小约束（用于后续 `verification` 分类推断）：
 此时必须：
 
 1. 回到失败分支重新生成原始 JSON 或 review seed
-2. 重新运行 `write_map_relevance_review.py` 或 `write_websearch_review.py` 产出 reviewed JSON
-3. 重新执行归并脚本
-4. 重新运行 `write_evidence_output.py`
-5. 只返回新的 `evidence_path`
+2. 若是 review seed 问题，必须重新调用子 agent / Task 输出合格 seed，不要手写或沿用 `auto_generated`
+3. 重新运行 `write_map_relevance_review.py` 或 `write_websearch_review.py` 产出 reviewed JSON
+4. 重新执行归并脚本
+5. 重新运行 `write_evidence_output.py`
+6. 只返回新的 `evidence_path`
 
 不要：
 

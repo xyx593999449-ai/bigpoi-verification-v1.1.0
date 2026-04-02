@@ -32,7 +32,10 @@
 - `evidence-collection/scripts/websearch_adapter.py`
 - `evidence-collection/scripts/call_internal_proxy.py`
 - `evidence-collection/scripts/call_map_vendor.py`
+- `evidence-collection/scripts/prepare_map_review_input.py`
 - `evidence-collection/scripts/prepare_websearch_review_input.py`
+- `evidence-collection/scripts/validate_map_review_seed.py`
+- `evidence-collection/scripts/validate_websearch_review_seed.py`
 - `evidence-collection/scripts/write_map_relevance_review.py`
 - `evidence-collection/scripts/write_websearch_review.py`
 - `evidence-collection/scripts/build_webfetch_plan.py`
@@ -85,6 +88,9 @@
 - `websearch` 分支统一走 `websearch_adapter.py`，固定 `baidu -> tavily` 回退顺序，脚本层会做最小必要字段保留、重复结果去重、标题/摘要清洗，并输出可继续 review 的 `items` 结构。
 - `websearch_adapter.py` 现在只读取 `internal_search.base_url` 或 `internal_proxy.search_base_url`，不再回退到图商 `mapapi` 地址；运行时会额外产出 `websearch-debug.json` 便于排查代理无结果问题。
 - `websearch` review 已拆成独立阶段：先运行 `prepare_websearch_review_input.py` 生成模型输入，再由模型产出 review seed，最后通过 `write_websearch_review.py` 落成 `websearch-reviewed.json`。
+- `websearch` review 现在必须显式输出 `entity_relation`，只有页面主体为目标 POI 本体的结果才允许进入 `websearch-reviewed.json`；正文顺带提到、导航列出、下属机构或同辖区页面会在 review 阶段剔除。
+- 图商 review 也已拆成独立阶段：先运行 `prepare_map_review_input.py` 生成精简候选卡片，再由子 agent / Task 逐条判断相关性，校验通过后写成 `map-reviewed-*.json`。
+- `validate_map_review_seed.py` 与 `validate_websearch_review_seed.py` 已成为正式 gate：`auto_generated`、全量放行、缺少结构化字段、未逐条覆盖等 seed 不允许继续进入 merge。
 - 证据收集主控与关键分支脚本会在 stderr 输出阶段性中文描述，并在 stdout JSON 中补充 `summary_text`，便于在 skill 日志中快速判断执行情况。
 - 上述白盒输出已覆盖 `build_web_source_plan.py`、`call_internal_proxy.py`、`websearch_adapter.py`、`call_map_vendor.py`、`write_map_relevance_review.py`、`merge_evidence_collection_outputs.py`、`write_evidence_output.py`。
 - 正式 evidence 在 `metadata` 最小保留 authority 高价值字段：`signal_origin`、`source_domain`、`page_title`、`text_snippet`、`level_hint`、`authority_signals`。
@@ -95,6 +101,7 @@
 - `evidence-collection` 已新增统一主控入口 `orchestrate_collection.py`，主线目录可直接程序化编排图商、`websearch`、补采、归并和 evidence 写出。
 - 若图商候选需要先做相关性过滤，主控可通过 `-InternalReviewSeedPath` 与 `-VendorReviewSeedPaths vendor=path` 在归并前生成 `map-reviewed-*.json`，避免“先核实、后过滤”。
 - `webfetch` 当前作为增强层存在，可先通过 `build_webfetch_plan.py` 基于 `websearch-reviewed.json` 生成待抓取列表；当 `webfetch` 失败或不可用时，允许继续使用 `websearch-reviewed.json` 进入 merge。
+- 主控与归并脚本现在都要求 reviewed-only 输入：图商和 `websearch` 若存在候选，必须先经过模型 review 和 seed 校验，raw 结果不能直接并入 formal evidence。
 - Product 域正式执行脚本已完成 Python 3.9 兼容处理，避免 `X | None` 这类 3.10+ 注解语法在正式环境报错。
 - `evidence_*.json` 输出 contract 保持不变，下游 `verification` 与父 skill 无需改协议。
 - 二期详细架构已补充为“计划驱动的 skill 编排 + Python worker + model review 节点”，详见 [docs/Product_phase2_detailed_design_plan_driven_evidence_collection_20260401.md](/Users/liubai/Documents/project/ft_project/datamalo/big_poi/docs/Product_phase2_detailed_design_plan_driven_evidence_collection_20260401.md)。

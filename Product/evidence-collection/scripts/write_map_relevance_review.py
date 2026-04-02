@@ -12,6 +12,7 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from run_context import attach_context, get_context, require_context
 from evidence_collection_common import ensure_stdout_utf8, read_json_file, utc_iso_now, write_json_file
+from validate_map_review_seed import build_candidate_catalog_from_raw_payload, validate_map_review_seed_against_catalog
 
 
 ALLOWED_STATUS = {"ok", "partial", "empty", "error"}
@@ -183,6 +184,7 @@ def main() -> int:
     resolved_poi_id = str(args.PoiId or (review_context or {}).get("poi_id") or (raw_context or {}).get("poi_id") or "").strip()
     resolved_task_id = str(args.TaskId or (review_context or {}).get("task_id") or (raw_context or {}).get("task_id") or "").strip()
 
+    validate_map_review_seed_against_catalog(build_candidate_catalog_from_raw_payload(raw_payload), review_seed)
     raw_vendors = extract_vendor_payloads(raw_payload)
     review_map = extract_review_map(review_seed)
 

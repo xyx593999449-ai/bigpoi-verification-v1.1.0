@@ -21,6 +21,7 @@ from evidence_collection_common import (
     utc_iso_now,
     write_json_file,
 )
+from validate_websearch_review_seed import build_catalog_from_raw_payload, validate_websearch_review_seed_against_catalog
 
 
 def log_progress(message: str) -> None:
@@ -45,6 +46,12 @@ def normalize_review_map(review_seed: Dict[str, Any]) -> Dict[str, Dict[str, Any
     return mapping
 
 
+def is_mergeable_review_item(review_item: Dict[str, Any]) -> bool:
+    if not bool(review_item.get("is_relevant")):
+        return False
+    return normalize_whitespace(review_item.get("entity_relation")) == "poi_body"
+
+
 def build_reviewed_item(raw_item: Dict[str, Any], review_item: Dict[str, Any]) -> Dict[str, Any]:
     source = dict(raw_item.get("source") if isinstance(raw_item.get("source"), dict) else {})
     raw_data = dict(raw_item.get("data") if isinstance(raw_item.get("data"), dict) else {})
@@ -65,6 +72,7 @@ def build_reviewed_item(raw_item: Dict[str, Any], review_item: Dict[str, Any]) -
     metadata["signal_origin"] = "websearch"
     metadata["review_status"] = "approved"
     metadata["review_reason"] = normalize_text(review_item.get("reason")) or "relevant_websearch_result"
+    metadata["entity_relation"] = normalize_text(review_item.get("entity_relation")) or "poi_body"
     metadata["result_id"] = str(review_item.get("result_id"))
     metadata["should_fetch"] = bool(review_item.get("should_fetch"))
     if normalize_whitespace(review_item.get("fetch_url")):
@@ -111,16 +119,25 @@ def main() -> int:
     resolved_poi_id = str(args.PoiId or raw_context.get("poi_id") or "").strip()
     resolved_task_id = str(args.TaskId or raw_context.get("task_id") or "").strip()
 
+    validate_websearch_review_seed_against_catalog(build_catalog_from_raw_payload(raw_payload), review_seed)
     review_map = normalize_review_map(review_seed)
     reviewed_items = []
     dropped_count = 0
+    filtered_by_relation_count = 0
     for index, raw_item in enumerate(get_generic_items(raw_payload)):
         if not isinstance(raw_item, dict):
             continue
         result_id = build_result_id(index)
         review_item = review_map.get(result_id)
-        if not review_item or not bool(review_item.get("is_relevant")):
+        if not review_item:
             dropped_count += 1
+            continue
+        if not bool(review_item.get("is_relevant")):
+            dropped_count += 1
+            continue
+        if not is_mergeable_review_item(review_item):
+            dropped_count += 1
+            filtered_by_relation_count += 1
             continue
         reviewed_items.append(build_reviewed_item(raw_item, review_item))
 
@@ -131,6 +148,7 @@ def main() -> int:
         "review_summary": {
             "kept_count": len(reviewed_items),
             "dropped_count": dropped_count,
+            "filtered_by_relation_count": filtered_by_relation_count,
         },
     }
     if resolved_run_id and resolved_poi_id:
@@ -142,7 +160,11 @@ def main() -> int:
         "result_path": str(Path(args.OutputPath).resolve()),
         "kept_count": len(reviewed_items),
         "dropped_count": dropped_count,
-        "summary_text": f"websearch review 写出完成：保留 {len(reviewed_items)} 条，剔除 {dropped_count} 条。",
+        "filtered_by_relation_count": filtered_by_relation_count,
+        "summary_text": (
+            f"websearch review 写出完成：保留 {len(reviewed_items)} 条，"
+            f"剔除 {dropped_count} 条，其中弱相关过滤 {filtered_by_relation_count} 条。"
+        ),
     }
     log_progress(result["summary_text"])
     json.dump(result, sys.stdout, ensure_ascii=False, indent=2)

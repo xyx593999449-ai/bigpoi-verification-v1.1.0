@@ -1,5 +1,13 @@
 # Product CHANGELOG
 
+## [1.10.5] - 2026-04-02
+### Fixed
+- 修正 `skills-bigpoi-verification/scripts/bundle_common.py` 在 Python 3.9 下对 `Path.write_text(..., newline=...)` 的不兼容调用，避免 `write_result_bundle.py` 成包阶段因 `unexpected keyword argument 'newline'` 失败。
+- 新增图商 review 预处理与 `map/websearch review seed` 校验脚本，禁止 `auto_generated`、全量放行或缺少结构化字段的 seed 继续进入 merge。
+- 收紧 `merge_evidence_collection_outputs.py` 与 `orchestrate_collection.py`，要求图商和 `websearch` 分支在有候选时必须先经过 reviewed gate，raw 结果不能直接并入 formal evidence。
+- 调整 `websearch_adapter.py` 的名称启发式，避免把输入 POI 名称盲目回填给无关搜索结果。
+- 收紧 `websearch` review contract，新增 `entity_relation` 枚举并要求 `is_relevant=true` 时必须为 `poi_body`，进一步压缩“正文提到/导航命中/下属机构”类噪音。
+
 ## [1.10.4] - 2026-04-01
 ### Added
 - 新增 `prepare_websearch_review_input.py`、`write_websearch_review.py`、`build_webfetch_plan.py`，把 `websearch reviewed` 与 `webfetch fallback` 正式拆成独立可落盘阶段。

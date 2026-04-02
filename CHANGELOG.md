@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.3] - 2026-04-02
+
+### Fixed
+- Product `evidence-collection` 新增 reviewed gate 强约束，图商与 `websearch` 分支不再允许通过 `auto_generated` 或 raw 结果直接进入 formal evidence。
+- Product `websearch` review 新增 `entity_relation` 收口规则，明确拦截“仅正文提到/站点导航命中/下属机构”这类弱相关页面。
+- 修正 Product 成包脚本在 Python 3.9 下对 `Path.write_text(..., newline=...)` 的不兼容调用。
+
 ## [1.4.2] - 2026-04-01
 
 ### Added
