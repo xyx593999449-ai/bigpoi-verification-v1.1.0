@@ -78,7 +78,9 @@ flowchart TD
 ## 7. 当前 Product 主线（2026-04-07）
 
 - `evidence-collection` 是 Product 侧唯一正式证据收集入口，内部再编排 `evidence-collection-web`、`evidence-collection-map` 与 `evidence-collection-merge` 三个子技能。
+- `evidence-collection/scripts/run_evidence_collection.py` 作为证据收集主脚本，负责并行 worker 调度、分支结果读取与 merge 落盘。
 - `evidence-collection/scripts/run_parallel_claude_agents.py` 参考 `Develop/row-batch/scripts/run_claude.py`，通过两个 `claude -p` worker 并发执行 web 与图商分支。
 - web 分支优先使用模型内置 `WebSearch / WebFetch`；仅在当前运行环境不可用时，才回退到内部代理 Python 脚本。
 - `claude -p` 调用日志统一落到 `output/results/{task_id}/claude-agent-logs/`，便于和正式结果目录一起排障留档。
+- review seed 默认由并行 worker 写入 `output/runs/{run_id}/process/`，legacy 编排脚本已支持自动发现，无需强制手动传参。
 - Product 技能工程化定稿方案见 [docs/Product_skill_engineering_finalization_plan_20260407.md](/Users/liubai/Documents/project/ft_project/datamalo/big_poi/docs/Product_skill_engineering_finalization_plan_20260407.md)。

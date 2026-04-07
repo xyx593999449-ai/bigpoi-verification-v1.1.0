@@ -23,6 +23,14 @@ def log_progress(message: str) -> None:
     sys.stderr.flush()
 
 
+def read_created_at(*contexts: dict) -> str:
+    for context in contexts:
+        value = str(context.get("created_at") or "").strip()
+        if value:
+            return value
+    return utc_iso_now()
+
+
 def build_candidate_key(item: dict, index: int) -> str:
     for field in ("vendor_item_id", "id", "uid"):
         value = item.get(field)
@@ -183,6 +191,7 @@ def main() -> int:
     resolved_run_id = str(args.RunId or (review_context or {}).get("run_id") or (raw_context or {}).get("run_id") or "").strip()
     resolved_poi_id = str(args.PoiId or (review_context or {}).get("poi_id") or (raw_context or {}).get("poi_id") or "").strip()
     resolved_task_id = str(args.TaskId or (review_context or {}).get("task_id") or (raw_context or {}).get("task_id") or "").strip()
+    created_at = read_created_at(review_context or {}, raw_context or {})
 
     validate_map_review_seed_against_catalog(build_candidate_catalog_from_raw_payload(raw_payload), review_seed)
     raw_vendors = extract_vendor_payloads(raw_payload)
@@ -199,7 +208,13 @@ def main() -> int:
 
     output = build_output(raw_payload, reviewed_vendors, summaries)
     if resolved_run_id and resolved_poi_id:
-        output = attach_context(output, resolved_run_id, resolved_poi_id, task_id=resolved_task_id or None)
+        output = attach_context(
+            output,
+            resolved_run_id,
+            resolved_poi_id,
+            task_id=resolved_task_id or None,
+            created_at=created_at,
+        )
     write_json_file(output, args.OutputPath)
 
     result = {

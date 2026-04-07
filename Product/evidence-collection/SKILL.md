@@ -27,6 +27,7 @@ allowed-tools: Bash Read Write Edit Glob Grep LS
 
 使用以下脚本：
 
+- `evidence-collection/scripts/run_evidence_collection.py`
 - `evidence-collection/scripts/run_parallel_claude_agents.py`
 - `skills-bigpoi-verification/scripts/init_run_context.py`
 
@@ -62,6 +63,15 @@ allowed-tools: Bash Read Write Edit Glob Grep LS
 - `output/runs/{run_id}/process/web-branch-result.json`
 - `output/runs/{run_id}/process/map-branch-result.json`
 - `output/runs/{run_id}/process/evidence-merge-result.json`
+
+## Seed 约定
+
+并行 worker 需要在 `output/runs/{run_id}/process/` 下写出 review seed；主调度脚本默认自动发现以下文件，不再强制手动参数注入：
+
+- `map-review-seed-internal-proxy.json`
+- `map-review-seed-fallback-{vendor}.json`
+- `websearch-review-seed.json`
+- `webreader-review-seed.json`
 
 ## Child skills
 

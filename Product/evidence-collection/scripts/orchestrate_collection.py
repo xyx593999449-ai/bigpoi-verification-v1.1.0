@@ -105,6 +105,25 @@ def parse_vendor_review_seed_paths(values: Optional[List[str]]) -> Dict[str, str
     return result
 
 
+def resolve_seed_path(explicit_path: Optional[str], default_path: Path) -> Optional[str]:
+    if explicit_path:
+        path = Path(explicit_path).resolve()
+        if path.exists():
+            return str(path)
+    if default_path.exists():
+        return str(default_path.resolve())
+    return None
+
+
+def build_seed_required_error(*, seed_type: str, expected_path: Path, review_input_path: Path) -> str:
+    return (
+        f"{seed_type} review seed is required before merge. "
+        f"expected_seed_path={expected_path.resolve()} "
+        f"review_input_path={review_input_path.resolve()} "
+        "请先让并行 worker 生成该 seed（或补充同结构 JSON）后重试。"
+    )
+
+
 def apply_map_review(
     *,
     py: str,
@@ -200,17 +219,30 @@ def main() -> int:
     websearch_path = process_dir / "websearch-raw.json"
     websearch_debug_path = process_dir / "websearch-debug.json"
     websearch_review_input_path = process_dir / "websearch-review-input.json"
+    websearch_review_seed_default_path = process_dir / "websearch-review-seed.json"
     websearch_reviewed_path = process_dir / "websearch-reviewed.json"
     webreader_plan_path = process_dir / "webreader-plan.json"
     webreader_path = process_dir / "webreader-raw.json"
     webreader_debug_path = process_dir / "webreader-debug.json"
     webreader_review_input_path = process_dir / "webreader-review-input.json"
+    webreader_review_seed_default_path = process_dir / "webreader-review-seed.json"
     webreader_reviewed_path = process_dir / "webreader-reviewed.json"
+    internal_review_seed_default_path = process_dir / "map-review-seed-internal-proxy.json"
     collector_merged_path = process_dir / "collector-merged.json"
 
     py = sys.executable
     retry_count = max(int(args.RetryCount), 0)
     vendor_review_seed_paths = parse_vendor_review_seed_paths(args.VendorReviewSeedPaths)
+    internal_review_seed_path = resolve_seed_path(args.InternalReviewSeedPath, internal_review_seed_default_path)
+    websearch_review_seed_path = resolve_seed_path(args.WebSearchReviewSeedPath, websearch_review_seed_default_path)
+    webreader_review_seed_path = resolve_seed_path(args.WebReaderReviewSeedPath, webreader_review_seed_default_path)
+    for vendor in ("amap", "bmap", "qmap"):
+        if vendor in vendor_review_seed_paths:
+            continue
+        fallback_seed_default_path = process_dir / f"map-review-seed-fallback-{vendor}.json"
+        resolved_seed = resolve_seed_path(None, fallback_seed_default_path)
+        if resolved_seed:
+            vendor_review_seed_paths[vendor] = resolved_seed
     log_progress(f"开始收集证据: poi_id={poi['id']} name={poi['name']} city={poi['city']} run_id={args.RunId}")
 
     plan_cmd = [py, str(SCRIPT_DIR / "build_web_source_plan.py"), "-PoiPath", str(args.PoiPath), "-OutputPath", str(web_plan_path)]
@@ -333,10 +365,13 @@ def main() -> int:
     run_json_command(internal_review_input_cmd, label="prepare_map_review_input[internal]", retries=retry_count)
     internal_payload = load_json(internal_proxy_path)
     if count_map_candidates(internal_payload) > 0:
-        if not args.InternalReviewSeedPath:
+        if not internal_review_seed_path:
             raise RuntimeError(
-                "internal map review seed is required before merge. "
-                f"review_input_path={internal_review_input_path}"
+                build_seed_required_error(
+                    seed_type="internal map",
+                    expected_path=internal_review_seed_default_path,
+                    review_input_path=internal_review_input_path,
+                )
             )
         validate_internal_review_cmd = [
             py,
@@ -344,13 +379,13 @@ def main() -> int:
             "-MapReviewInputPath",
             str(internal_review_input_path),
             "-ReviewSeedPath",
-            str(args.InternalReviewSeedPath),
+            str(internal_review_seed_path),
         ]
         run_json_command(validate_internal_review_cmd, label="validate_map_review_seed[internal]", retries=retry_count)
         apply_map_review(
             py=py,
             raw_map_path=internal_proxy_path,
-            review_seed_path=str(args.InternalReviewSeedPath),
+            review_seed_path=str(internal_review_seed_path),
             output_path=internal_reviewed_path,
             poi_id=str(poi["id"]),
             run_id=str(args.RunId),
@@ -412,8 +447,11 @@ def main() -> int:
         review_seed_path = vendor_review_seed_paths.get(vendor)
         if not review_seed_path:
             raise RuntimeError(
-                f"vendor fallback review seed is required before merge: vendor={vendor} "
-                f"review_input_path={fallback_review_input_path}"
+                build_seed_required_error(
+                    seed_type=f"vendor fallback ({vendor}) map",
+                    expected_path=process_dir / f"map-review-seed-fallback-{vendor}.json",
+                    review_input_path=fallback_review_input_path,
+                )
             )
 
         validate_fallback_review_cmd = [
@@ -460,10 +498,13 @@ def main() -> int:
         if args.TaskId:
             prepare_websearch_cmd.extend(["-TaskId", str(args.TaskId)])
         run_json_command(prepare_websearch_cmd, label="prepare_websearch_review_input", retries=retry_count)
-        if not args.WebSearchReviewSeedPath:
+        if not websearch_review_seed_path:
             raise RuntimeError(
-                "websearch review seed is required before merge. "
-                f"review_input_path={websearch_review_input_path}"
+                build_seed_required_error(
+                    seed_type="websearch",
+                    expected_path=websearch_review_seed_default_path,
+                    review_input_path=websearch_review_input_path,
+                )
             )
         validate_websearch_cmd = [
             py,
@@ -471,13 +512,13 @@ def main() -> int:
             "-WebSearchReviewInputPath",
             str(websearch_review_input_path),
             "-ReviewSeedPath",
-            str(args.WebSearchReviewSeedPath),
+            str(websearch_review_seed_path),
         ]
         run_json_command(validate_websearch_cmd, label="validate_websearch_review_seed", retries=retry_count)
         apply_websearch_review(
             py=py,
             raw_websearch_path=websearch_path,
-            review_seed_path=str(args.WebSearchReviewSeedPath),
+            review_seed_path=str(websearch_review_seed_path),
             output_path=websearch_reviewed_path,
             poi_id=str(poi["id"]),
             run_id=str(args.RunId),
@@ -554,10 +595,13 @@ def main() -> int:
                 if args.TaskId:
                     prepare_webreader_cmd.extend(["-TaskId", str(args.TaskId)])
                 run_json_command(prepare_webreader_cmd, label="prepare_webreader_review_input", retries=retry_count)
-                if not args.WebReaderReviewSeedPath:
+                if not webreader_review_seed_path:
                     raise RuntimeError(
-                        "webreader review seed is required before merge. "
-                        f"review_input_path={webreader_review_input_path}"
+                        build_seed_required_error(
+                            seed_type="webreader",
+                            expected_path=webreader_review_seed_default_path,
+                            review_input_path=webreader_review_input_path,
+                        )
                     )
                 validate_webreader_cmd = [
                     py,
@@ -565,7 +609,7 @@ def main() -> int:
                     "-WebReaderReviewInputPath",
                     str(webreader_review_input_path),
                     "-ReviewSeedPath",
-                    str(args.WebReaderReviewSeedPath),
+                    str(webreader_review_seed_path),
                 ]
                 run_json_command(validate_webreader_cmd, label="validate_webreader_review_seed", retries=retry_count)
                 apply_webreader_review_cmd = [
@@ -576,7 +620,7 @@ def main() -> int:
                     "-WebReaderReviewInputPath",
                     str(webreader_review_input_path),
                     "-ReviewSeedPath",
-                    str(args.WebReaderReviewSeedPath),
+                    str(webreader_review_seed_path),
                     "-OutputPath",
                     str(webreader_reviewed_path),
                     "-PoiId",

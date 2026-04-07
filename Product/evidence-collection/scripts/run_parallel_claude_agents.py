@@ -139,6 +139,7 @@ def main() -> int:
     output_path = Path(args.OutputPath).resolve()
     log_directory = Path(args.LogDirectory).resolve()
     result_task_dir = workspace_root / "output" / "results" / str(args.TaskId)
+    process_dir = workspace_root / "output" / "runs" / str(args.RunId) / "process"
     if not log_directory.is_absolute():
         log_directory = (workspace_root / log_directory).resolve()
     if str(log_directory).startswith(str(output_path.parent)):
@@ -146,12 +147,26 @@ def main() -> int:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     result_task_dir.mkdir(parents=True, exist_ok=True)
     log_directory.mkdir(parents=True, exist_ok=True)
+    process_dir.mkdir(parents=True, exist_ok=True)
 
     runtime_payload = {
         "input_poi_path": str(Path(args.InputPath).resolve()),
         "run_id": str(args.RunId),
         "task_id": str(args.TaskId),
         "workspace_root": str(workspace_root),
+        "process_dir": str(process_dir),
+        "branch_result_paths": {
+            "web": str(process_dir / "web-branch-result.json"),
+            "map": str(process_dir / "map-branch-result.json"),
+        },
+        "review_seed_paths": {
+            "websearch": str(process_dir / "websearch-review-seed.json"),
+            "webreader": str(process_dir / "webreader-review-seed.json"),
+            "map_internal": str(process_dir / "map-review-seed-internal-proxy.json"),
+            "map_fallback_amap": str(process_dir / "map-review-seed-fallback-amap.json"),
+            "map_fallback_bmap": str(process_dir / "map-review-seed-fallback-bmap.json"),
+            "map_fallback_qmap": str(process_dir / "map-review-seed-fallback-qmap.json"),
+        },
     }
 
     web_log_path = log_directory / "claude_web_worker.log"

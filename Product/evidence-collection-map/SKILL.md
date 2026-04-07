@@ -26,6 +26,7 @@ allowed-tools: Bash Read Write Edit Glob Grep LS
 - `evidence-collection-map/scripts/prepare_map_review_input.py`
 - `evidence-collection-map/scripts/validate_map_review_seed.py`
 - `evidence-collection-map/scripts/write_map_relevance_review.py`
+- `evidence-collection-map/scripts/write_map_branch_result.py`
 
 提示词文件：
 
@@ -41,6 +42,11 @@ allowed-tools: Bash Read Write Edit Glob Grep LS
 必须落盘：
 
 - `output/runs/{run_id}/process/map-branch-result.json`
+
+推荐同时落盘 review seed（由 worker 生成，供 review 脚本消费）：
+
+- `output/runs/{run_id}/process/map-review-seed-internal-proxy.json`
+- `output/runs/{run_id}/process/map-review-seed-fallback-{vendor}.json`
 
 至少包含：
 

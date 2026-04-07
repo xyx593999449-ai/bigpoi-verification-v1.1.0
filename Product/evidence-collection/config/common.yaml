@@ -53,7 +53,7 @@ internal_search:
 # ============================================================================
 internal_webreader:
   enabled: true
-  base_url: "https://10.82.122.209:9081/botshop/proxy/webfetch"
+  base_url: "http://10.82.122.209:9081/botshop/proxy/webfetch"
   timeout: 30
   retry_count: 2
   max_workers: 8

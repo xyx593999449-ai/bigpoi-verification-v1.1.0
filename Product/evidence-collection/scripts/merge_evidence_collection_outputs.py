@@ -10,7 +10,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from run_context import attach_context, collect_item_run_ids, require_context, set_item_run_context
+from run_context import attach_context, collect_item_run_ids, get_context, require_context, set_item_run_context
 from evidence_collection_common import (
     ensure_stdout_utf8,
     finalize_evidence_seed,
@@ -57,6 +57,45 @@ def is_reviewed_generic_payload(payload: object) -> bool:
     return isinstance(payload, dict) and normalize_whitespace(payload.get("reviewed_at")) is not None and isinstance(payload.get("review_summary"), dict)
 
 
+def patch_merge_context(
+    payload: object,
+    *,
+    expected_poi_id: str,
+    fallback_run_id: str,
+    fallback_task_id: str,
+) -> object:
+    if not isinstance(payload, dict):
+        return payload
+    context = get_context(payload)
+    reviewed_or_generated_at = str(payload.get("reviewed_at") or payload.get("generated_at") or utc_iso_now())
+    status = str(payload.get("status") or "").strip().lower()
+    if context is None:
+        if status in {"empty", "skipped"} and fallback_run_id:
+            return attach_context(
+                payload,
+                fallback_run_id,
+                expected_poi_id,
+                task_id=fallback_task_id or None,
+                created_at=reviewed_or_generated_at,
+            )
+        return payload
+    poi_id = str(context.get("poi_id") or "").strip() or expected_poi_id
+    run_id = str(context.get("run_id") or "").strip() or fallback_run_id
+    task_id = str(context.get("task_id") or "").strip() or fallback_task_id
+    created_at = str(context.get("created_at") or "").strip()
+    if created_at:
+        return payload
+    if run_id and poi_id:
+        return attach_context(
+            payload,
+            run_id,
+            poi_id,
+            task_id=task_id or None,
+            created_at=reviewed_or_generated_at,
+        )
+    return payload
+
+
 def main() -> int:
     ensure_stdout_utf8()
     parser = argparse.ArgumentParser()
@@ -90,7 +129,12 @@ def main() -> int:
     internal_missing_vendors: list[str] = []
     fallback_recovered: set[str] = set()
 
-    internal_payload = read_json_file(args.InternalProxyPath)
+    internal_payload = patch_merge_context(
+        read_json_file(args.InternalProxyPath),
+        expected_poi_id=str(poi["id"]),
+        fallback_run_id=resolved_run_id,
+        fallback_task_id=resolved_task_id,
+    )
     internal_context = require_context(internal_payload, label="internal_proxy", expected_poi_id=str(poi["id"]), expected_run_id=resolved_run_id or None, allow_missing=not bool(resolved_run_id))
     if not resolved_run_id and internal_context is not None:
         resolved_run_id = str(internal_context.get("run_id") or "").strip()
@@ -121,7 +165,12 @@ def main() -> int:
     for fallback_path in args.VendorFallbackPaths or []:
         if not normalize_whitespace(fallback_path):
             continue
-        payload = read_json_file(fallback_path)
+        payload = patch_merge_context(
+            read_json_file(fallback_path),
+            expected_poi_id=str(poi["id"]),
+            fallback_run_id=resolved_run_id,
+            fallback_task_id=resolved_task_id,
+        )
         fallback_context = require_context(payload, label=f"vendor_fallback[{fallback_path}]", expected_poi_id=str(poi["id"]), expected_run_id=resolved_run_id or None, allow_missing=not bool(resolved_run_id))
         if not resolved_run_id and fallback_context is not None:
             resolved_run_id = str(fallback_context.get("run_id") or "").strip()
@@ -146,7 +195,12 @@ def main() -> int:
             evidence_seeds.append(seed)
 
     if args.WebSearchPath:
-        payload = read_json_file(args.WebSearchPath)
+        payload = patch_merge_context(
+            read_json_file(args.WebSearchPath),
+            expected_poi_id=str(poi["id"]),
+            fallback_run_id=resolved_run_id,
+            fallback_task_id=resolved_task_id,
+        )
         websearch_context = require_context(payload, label="websearch", expected_poi_id=str(poi["id"]), expected_run_id=resolved_run_id or None, allow_missing=not bool(resolved_run_id))
         if not resolved_run_id and websearch_context is not None:
             resolved_run_id = str(websearch_context.get("run_id") or "").strip()
@@ -165,7 +219,12 @@ def main() -> int:
 
     webreader_input_path = args.WebReaderPath or args.WebFetchPath
     if webreader_input_path:
-        payload = read_json_file(webreader_input_path)
+        payload = patch_merge_context(
+            read_json_file(webreader_input_path),
+            expected_poi_id=str(poi["id"]),
+            fallback_run_id=resolved_run_id,
+            fallback_task_id=resolved_task_id,
+        )
         webreader_context = require_context(
             payload,
             label="webreader",

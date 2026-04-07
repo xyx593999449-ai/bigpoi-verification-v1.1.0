@@ -36,6 +36,14 @@ def build_result_id(index: int) -> str:
     return f"WEB_{index + 1:03d}"
 
 
+def read_created_at(*contexts: Dict[str, Any]) -> str:
+    for context in contexts:
+        value = str(context.get("created_at") or "").strip()
+        if value:
+            return value
+    return utc_iso_now()
+
+
 def normalize_review_map(review_seed: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     items = review_seed.get("items") if isinstance(review_seed.get("items"), list) else []
     mapping: Dict[str, Dict[str, Any]] = {}
@@ -122,9 +130,11 @@ def main() -> int:
         raise ValueError("review seed must be an object")
 
     raw_context = get_context(raw_payload) or {}
-    resolved_run_id = str(args.RunId or raw_context.get("run_id") or "").strip()
-    resolved_poi_id = str(args.PoiId or raw_context.get("poi_id") or "").strip()
-    resolved_task_id = str(args.TaskId or raw_context.get("task_id") or "").strip()
+    seed_context = get_context(review_seed) or {}
+    resolved_run_id = str(args.RunId or raw_context.get("run_id") or seed_context.get("run_id") or "").strip()
+    resolved_poi_id = str(args.PoiId or raw_context.get("poi_id") or seed_context.get("poi_id") or "").strip()
+    resolved_task_id = str(args.TaskId or raw_context.get("task_id") or seed_context.get("task_id") or "").strip()
+    created_at = read_created_at(raw_context, seed_context)
 
     validate_websearch_review_seed_against_catalog(build_catalog_from_raw_payload(raw_payload), review_seed)
     review_map = normalize_review_map(review_seed)
@@ -159,7 +169,13 @@ def main() -> int:
         },
     }
     if resolved_run_id and resolved_poi_id:
-        output = attach_context(output, resolved_run_id, resolved_poi_id, task_id=resolved_task_id or None)
+        output = attach_context(
+            output,
+            resolved_run_id,
+            resolved_poi_id,
+            task_id=resolved_task_id or None,
+            created_at=created_at,
+        )
     write_json_file(output, args.OutputPath)
 
     result = {

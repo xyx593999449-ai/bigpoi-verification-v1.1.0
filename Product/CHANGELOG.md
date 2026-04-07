@@ -1,5 +1,21 @@
 # Product CHANGELOG
 
+## [2.0.1] - 2026-04-07
+### Added
+- 新增 `evidence-collection/scripts/run_evidence_collection.py`，作为主入口一键编排并行 worker、分支结果读取、merge 与 formal evidence 写出。
+- 新增分支结果写入脚本：
+  - `evidence-collection-web/scripts/write_web_branch_result.py`
+  - `evidence-collection-map/scripts/write_map_branch_result.py`
+
+### Changed
+- `evidence-collection/scripts/orchestrate_collection.py` 支持自动发现默认 seed 文件（`map-review-seed-internal-proxy.json`、`map-review-seed-fallback-{vendor}.json`、`websearch-review-seed.json`、`webreader-review-seed.json`），降低手动参数依赖。
+- `orchestrate_collection.py` 的 seed 缺失报错升级为可执行提示，输出 `expected_seed_path` 与 `review_input_path` 指引后续执行。
+- web/map 的 `write_*_review.py` 在写入 context 时显式透传 `created_at`，保证 merge 阶段上下文稳定。
+- 两套 merge 脚本（`evidence-collection/scripts` 与 `evidence-collection-merge/scripts`）新增 context 兜底补齐逻辑，避免 `empty/skipped` 分支因 `context.created_at` 缺失直接失败。
+
+### Docs
+- 更新 `Product/README.md` 与 `evidence-collection*` 技能文档，补充新主入口、分支结果写入脚本与 review seed 默认路径约定。
+
 ## [2.0.0] - 2026-04-07
 ### Changed
 - 完成 Product 域证据收集技能工程化重构，正式收敛为 `evidence-collection` 主入口与 `evidence-collection-web`、`evidence-collection-map`、`evidence-collection-merge` 三个子技能。

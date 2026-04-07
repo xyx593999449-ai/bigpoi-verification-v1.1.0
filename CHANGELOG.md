@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.1] - 2026-04-07
+
+### Added
+- Product 新增 `evidence-collection/scripts/run_evidence_collection.py` 作为证据收集主脚本，统一编排并行 worker、merge 与 formal evidence 落盘。
+- 新增分支结果写入脚本：`evidence-collection-web/scripts/write_web_branch_result.py`、`evidence-collection-map/scripts/write_map_branch_result.py`。
+
+### Changed
+- `orchestrate_collection.py` 支持自动发现默认 review seed 路径，并增强 seed 缺失报错提示（包含 expected seed 路径与对应 review input 路径）。
+- web/map review 写出链路与 merge 链路补充 `context.created_at` 稳定兜底，减少 `empty/skipped` 分支的 merge 失败。
+- 仓库级与 Product 域文档补充新主入口、分支结果脚本与 seed 路径约定。
+
 ## [2.0.0] - 2026-04-07
 
 ### Changed

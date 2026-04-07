@@ -36,6 +36,7 @@ allowed-tools: Bash Read Write Edit Glob Grep LS WebSearch WebFetch
 - `evidence-collection-web/scripts/prepare_webreader_review_input.py`
 - `evidence-collection-web/scripts/validate_webreader_review_seed.py`
 - `evidence-collection-web/scripts/write_webreader_review.py`
+- `evidence-collection-web/scripts/write_web_branch_result.py`
 
 提示词文件：
 
@@ -52,6 +53,11 @@ allowed-tools: Bash Read Write Edit Glob Grep LS WebSearch WebFetch
 必须落盘：
 
 - `output/runs/{run_id}/process/web-branch-result.json`
+
+推荐同时落盘 review seed（由 worker 生成，供 review 脚本消费）：
+
+- `output/runs/{run_id}/process/websearch-review-seed.json`
+- `output/runs/{run_id}/process/webreader-review-seed.json`
 
 至少包含：
 

@@ -34,6 +34,7 @@
 
 ### 4.1 `evidence-collection`
 
+- `evidence-collection/scripts/run_evidence_collection.py`
 - `evidence-collection/scripts/run_parallel_claude_agents.py`
 - `evidence-collection/scripts/evidence_collection_common.py`
 - `evidence-collection/scripts/run_context.py`
@@ -50,6 +51,7 @@
 - `evidence-collection-web/scripts/prepare_webreader_review_input.py`
 - `evidence-collection-web/scripts/validate_webreader_review_seed.py`
 - `evidence-collection-web/scripts/write_webreader_review.py`
+- `evidence-collection-web/scripts/write_web_branch_result.py`
 - `evidence-collection-web/scripts/internal_search_client.py`
 
 ### 4.3 `evidence-collection-map`
@@ -59,6 +61,7 @@
 - `evidence-collection-map/scripts/prepare_map_review_input.py`
 - `evidence-collection-map/scripts/validate_map_review_seed.py`
 - `evidence-collection-map/scripts/write_map_relevance_review.py`
+- `evidence-collection-map/scripts/write_map_branch_result.py`
 
 ### 4.4 `evidence-collection-merge`
 
@@ -94,7 +97,7 @@
 推荐执行流：
 
 1. `skills-bigpoi-verification/scripts/init_run_context.py` 初始化 `run_id` 与 `task_id`。
-2. `evidence-collection/scripts/run_parallel_claude_agents.py` 通过两个 `claude -p` worker 并发拉起 `evidence-collection-web` 与 `evidence-collection-map`。
+2. `evidence-collection/scripts/run_evidence_collection.py` 作为主脚本，内部调用 `run_parallel_claude_agents.py` 并发拉起 `evidence-collection-web` 与 `evidence-collection-map`。
 3. 两个分支分别落盘 `web-branch-result.json` 与 `map-branch-result.json`。
 4. `evidence-collection-merge` 读取 reviewed-only 输入，生成 `collector-merged.json` 与正式 `evidence_*.json`。
 5. `verification` 读取 `evidence_path` 生成正式 `decision_*.json`。
@@ -103,6 +106,13 @@
 `claude -p` worker 的调用日志统一落到：
 
 - `output/results/{task_id}/claude-agent-logs/`
+
+review seed 默认路径（由并行 worker 生成，legacy 编排自动发现）：
+
+- `output/runs/{run_id}/process/map-review-seed-internal-proxy.json`
+- `output/runs/{run_id}/process/map-review-seed-fallback-{vendor}.json`
+- `output/runs/{run_id}/process/websearch-review-seed.json`
+- `output/runs/{run_id}/process/webreader-review-seed.json`
 
 ## 6. 输出结果约束
 
