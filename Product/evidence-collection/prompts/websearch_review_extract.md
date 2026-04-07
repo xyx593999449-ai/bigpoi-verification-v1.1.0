@@ -13,8 +13,8 @@
   - `source_type`
   - `entity_relation`
   - `evidence_ready`
-  - `should_fetch`
-  - `fetch_url`
+  - `should_read`
+  - `read_url`
   - `extracted`
 - 必须覆盖输入中的每一条 `review_items`
 - 不允许把所有结果统一判成 `true`
@@ -49,6 +49,6 @@
 - 能从标题、摘要中直接确定的字段就直接抽取
 - 不确定的字段留空，不要编造
 - 如果摘要已经足以形成结构化结果，且 `entity_relation=poi_body`，则 `evidence_ready=true`
-- 只有当页面明显还有更完整信息可抓取时，才设置 `should_fetch=true`
-- `webfetch` 是增强层，不是当前 item 成立的前提；即使 `should_fetch=true`，当前 item 仍要给出可用的结构化结果
+- 只有当页面明显还有更完整信息可抓取时，才设置 `should_read=true`
+- `webreader` 是增强层，不是当前 item 成立的前提；即使 `should_read=true`，当前 item 仍要给出可用的结构化结果
 - 当 `is_relevant=true` 时，`extracted.name` 必须有值，且 `evidence_ready=true`

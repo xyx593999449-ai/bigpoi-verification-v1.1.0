@@ -172,6 +172,8 @@ def main() -> int:
     parser.add_argument("-OutputRoot", required=True)
     parser.add_argument("-RunId", required=True)
     parser.add_argument("-TaskId")
+    parser.add_argument("-WebReaderPath")
+    parser.add_argument("-WebReaderReviewSeedPath")
     parser.add_argument("-WebFetchPath")
     parser.add_argument("-CommonConfigPath")
     parser.add_argument("-RetryCount", type=int, default=1)
@@ -199,6 +201,11 @@ def main() -> int:
     websearch_debug_path = process_dir / "websearch-debug.json"
     websearch_review_input_path = process_dir / "websearch-review-input.json"
     websearch_reviewed_path = process_dir / "websearch-reviewed.json"
+    webreader_plan_path = process_dir / "webreader-plan.json"
+    webreader_path = process_dir / "webreader-raw.json"
+    webreader_debug_path = process_dir / "webreader-debug.json"
+    webreader_review_input_path = process_dir / "webreader-review-input.json"
+    webreader_reviewed_path = process_dir / "webreader-reviewed.json"
     collector_merged_path = process_dir / "collector-merged.json"
 
     py = sys.executable
@@ -226,33 +233,45 @@ def main() -> int:
         "-OutputPath",
         str(internal_proxy_path),
     ]
-    websearch_cmd = [
-        py,
-        str(SCRIPT_DIR / "websearch_adapter.py"),
-        "-WebPlanPath",
-        str(web_plan_path),
-        "-OutputPath",
-        str(websearch_path),
-        "-DebugLogPath",
-        str(websearch_debug_path),
-        "-PoiId",
-        str(poi["id"]),
-        "-RunId",
-        str(args.RunId),
-    ]
+    execute_websearch = int(plan_result.get("search_query_count") or 0) > 0
+    websearch_cmd: Optional[List[str]] = None
+    if execute_websearch:
+        websearch_cmd = [
+            py,
+            str(SCRIPT_DIR / "websearch_adapter.py"),
+            "-WebPlanPath",
+            str(web_plan_path),
+            "-OutputPath",
+            str(websearch_path),
+            "-DebugLogPath",
+            str(websearch_debug_path),
+            "-PoiId",
+            str(poi["id"]),
+            "-RunId",
+            str(args.RunId),
+        ]
     if args.TaskId:
         internal_cmd.extend(["-TaskId", str(args.TaskId)])
-        websearch_cmd.extend(["-TaskId", str(args.TaskId)])
+        if websearch_cmd is not None:
+            websearch_cmd.extend(["-TaskId", str(args.TaskId)])
     if args.CommonConfigPath:
         internal_cmd.extend(["-CommonConfigPath", str(args.CommonConfigPath)])
-        websearch_cmd.extend(["-CommonConfigPath", str(args.CommonConfigPath)])
+        if websearch_cmd is not None:
+            websearch_cmd.extend(["-CommonConfigPath", str(args.CommonConfigPath)])
 
     internal_proc = subprocess.Popen(internal_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8")
-    websearch_proc = subprocess.Popen(websearch_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8")
-    log_progress("并发执行图商代理与 websearch")
+    websearch_proc: Optional[subprocess.Popen[str]] = None
+    if websearch_cmd is not None:
+        websearch_proc = subprocess.Popen(websearch_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8")
+        log_progress("并发执行图商代理与 websearch")
+    else:
+        log_progress("执行图商代理；websearch 已跳过（无 search_queries）")
 
     internal_stdout, internal_stderr = internal_proc.communicate()
-    websearch_stdout, websearch_stderr = websearch_proc.communicate()
+    websearch_stdout = ""
+    websearch_stderr = ""
+    if websearch_proc is not None:
+        websearch_stdout, websearch_stderr = websearch_proc.communicate()
     if internal_stderr.strip():
         sys.stderr.write(internal_stderr.strip() + "\n")
         sys.stderr.flush()
@@ -262,9 +281,17 @@ def main() -> int:
     if internal_proc.returncode != 0:
         raise RuntimeError(f"call_internal_proxy failed: {(internal_stderr or internal_stdout).strip()}")
     internal_result = json.loads(internal_stdout.strip() or "{}")
-    websearch_result = json.loads(websearch_stdout.strip() or "{}")
-    if should_fail_websearch_branch(websearch_proc.returncode, websearch_result):
-        raise RuntimeError(f"websearch_adapter failed: {(websearch_stderr or websearch_stdout).strip()}")
+    if websearch_proc is not None:
+        websearch_result = json.loads(websearch_stdout.strip() or "{}")
+        if should_fail_websearch_branch(websearch_proc.returncode, websearch_result):
+            raise RuntimeError(f"websearch_adapter failed: {(websearch_stderr or websearch_stdout).strip()}")
+    else:
+        websearch_result = {
+            "status": "empty",
+            "query_count": 0,
+            "result_count": 0,
+            "effective_provider": None,
+        }
     if str(internal_result.get("status") or "").strip() == "error":
         raise RuntimeError(f"call_internal_proxy returned error status: {(internal_stderr or internal_stdout).strip()}")
     log_progress(
@@ -275,14 +302,17 @@ def main() -> int:
             missing=",".join(internal_result.get("missing_vendors") or []) or "none",
         )
     )
-    log_progress(
-        "websearch 完成: status={status} query_count={query_count} result_count={result_count} provider={provider}".format(
-            status=websearch_result.get("status"),
-            query_count=websearch_result.get("query_count", 0),
-            result_count=websearch_result.get("result_count", 0),
-            provider=websearch_result.get("effective_provider") or "none",
+    if websearch_proc is not None:
+        log_progress(
+            "websearch 完成: status={status} query_count={query_count} result_count={result_count} provider={provider}".format(
+                status=websearch_result.get("status"),
+                query_count=websearch_result.get("query_count", 0),
+                result_count=websearch_result.get("result_count", 0),
+                provider=websearch_result.get("effective_provider") or "none",
+            )
         )
-    )
+    else:
+        log_progress("websearch 已跳过：本次计划无 search_queries")
 
     review_outputs: Dict[str, str] = {}
     internal_merge_input_path = str(internal_proxy_path)
@@ -458,6 +488,109 @@ def main() -> int:
         review_outputs["websearch"] = str(websearch_reviewed_path)
         log_progress("websearch 候选已完成结构化 review")
 
+    webreader_merge_input_path: Optional[str] = None
+    external_webreader_path = args.WebReaderPath or args.WebFetchPath
+    if external_webreader_path:
+        webreader_merge_input_path = str(external_webreader_path)
+        log_progress("检测到外部传入 webreader/webfetch reviewed 结果，跳过内部 webreader 执行")
+    else:
+        build_webreader_plan_cmd = [
+            py,
+            str(SCRIPT_DIR / "build_webreader_plan.py"),
+            "-WebPlanPath",
+            str(web_plan_path),
+            "-OutputPath",
+            str(webreader_plan_path),
+            "-PoiId",
+            str(poi["id"]),
+            "-RunId",
+            str(args.RunId),
+        ]
+        if websearch_merge_input_path:
+            build_webreader_plan_cmd.extend(["-WebSearchReviewedPath", websearch_merge_input_path])
+        if args.TaskId:
+            build_webreader_plan_cmd.extend(["-TaskId", str(args.TaskId)])
+        webreader_plan_result = run_json_command(build_webreader_plan_cmd, label="build_webreader_plan", retries=retry_count)
+        if int(webreader_plan_result.get("read_target_count") or 0) > 0:
+            webreader_cmd = [
+                py,
+                str(SCRIPT_DIR / "webreader_adapter.py"),
+                "-WebReaderPlanPath",
+                str(webreader_plan_path),
+                "-OutputPath",
+                str(webreader_path),
+                "-DebugLogPath",
+                str(webreader_debug_path),
+                "-PoiId",
+                str(poi["id"]),
+                "-RunId",
+                str(args.RunId),
+            ]
+            if args.TaskId:
+                webreader_cmd.extend(["-TaskId", str(args.TaskId)])
+            if args.CommonConfigPath:
+                webreader_cmd.extend(["-CommonConfigPath", str(args.CommonConfigPath)])
+            webreader_result = run_json_command(webreader_cmd, label="webreader_adapter", retries=retry_count)
+            log_progress(
+                "webreader 完成: status={status} item_count={item_count} failed_count={failed_count}".format(
+                    status=webreader_result.get("status"),
+                    item_count=webreader_result.get("item_count", 0),
+                    failed_count=webreader_result.get("failed_count", 0),
+                )
+            )
+            if int(webreader_result.get("item_count") or 0) > 0:
+                prepare_webreader_cmd = [
+                    py,
+                    str(SCRIPT_DIR / "prepare_webreader_review_input.py"),
+                    "-PoiPath",
+                    str(args.PoiPath),
+                    "-WebReaderRawPath",
+                    str(webreader_path),
+                    "-OutputPath",
+                    str(webreader_review_input_path),
+                    "-RunId",
+                    str(args.RunId),
+                ]
+                if args.TaskId:
+                    prepare_webreader_cmd.extend(["-TaskId", str(args.TaskId)])
+                run_json_command(prepare_webreader_cmd, label="prepare_webreader_review_input", retries=retry_count)
+                if not args.WebReaderReviewSeedPath:
+                    raise RuntimeError(
+                        "webreader review seed is required before merge. "
+                        f"review_input_path={webreader_review_input_path}"
+                    )
+                validate_webreader_cmd = [
+                    py,
+                    str(SCRIPT_DIR / "validate_webreader_review_seed.py"),
+                    "-WebReaderReviewInputPath",
+                    str(webreader_review_input_path),
+                    "-ReviewSeedPath",
+                    str(args.WebReaderReviewSeedPath),
+                ]
+                run_json_command(validate_webreader_cmd, label="validate_webreader_review_seed", retries=retry_count)
+                apply_webreader_review_cmd = [
+                    py,
+                    str(SCRIPT_DIR / "write_webreader_review.py"),
+                    "-WebReaderRawPath",
+                    str(webreader_path),
+                    "-WebReaderReviewInputPath",
+                    str(webreader_review_input_path),
+                    "-ReviewSeedPath",
+                    str(args.WebReaderReviewSeedPath),
+                    "-OutputPath",
+                    str(webreader_reviewed_path),
+                    "-PoiId",
+                    str(poi["id"]),
+                    "-RunId",
+                    str(args.RunId),
+                ]
+                if args.TaskId:
+                    apply_webreader_review_cmd.extend(["-TaskId", str(args.TaskId)])
+                run_json_command(apply_webreader_review_cmd, label="write_webreader_review", retries=retry_count)
+                webreader_merge_input_path = str(webreader_reviewed_path)
+                review_outputs["webreader"] = str(webreader_reviewed_path)
+                log_progress("webreader 候选已完成结构化 review")
+
     merge_cmd = [
         py,
         str(SCRIPT_DIR / "merge_evidence_collection_outputs.py"),
@@ -474,8 +607,8 @@ def main() -> int:
         merge_cmd.extend(["-TaskId", str(args.TaskId)])
     if websearch_merge_input_path:
         merge_cmd.extend(["-WebSearchPath", websearch_merge_input_path])
-    if args.WebFetchPath:
-        merge_cmd.extend(["-WebFetchPath", str(args.WebFetchPath)])
+    if webreader_merge_input_path:
+        merge_cmd.extend(["-WebReaderPath", webreader_merge_input_path])
     if vendor_fallback_paths:
         merge_cmd.extend(["-VendorFallbackPaths", *vendor_fallback_paths])
     merge_result = run_json_command(merge_cmd, label="merge_evidence_collection_outputs", retries=retry_count)
@@ -517,6 +650,11 @@ def main() -> int:
         "websearch_review_input_path": str(websearch_review_input_path) if websearch_merge_input_path else None,
         "websearch_reviewed_path": review_outputs.get("websearch"),
         "websearch_debug_path": str(websearch_debug_path),
+        "webreader_plan_path": str(webreader_plan_path),
+        "webreader_path": str(webreader_path) if webreader_path.exists() else None,
+        "webreader_review_input_path": str(webreader_review_input_path) if webreader_review_input_path.exists() else None,
+        "webreader_reviewed_path": review_outputs.get("webreader"),
+        "webreader_debug_path": str(webreader_debug_path) if webreader_debug_path.exists() else None,
         "vendor_fallback_paths": vendor_fallback_paths,
         "review_outputs": review_outputs,
         "collector_merged_path": str(collector_merged_path),

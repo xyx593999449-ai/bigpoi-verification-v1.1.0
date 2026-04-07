@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import json
 import re
+import socket
 import sys
 import urllib.parse
 from pathlib import Path
@@ -58,6 +60,8 @@ def log_progress(message: str) -> None:
 
 
 def iter_plan_sources(plan: Dict[str, Any]) -> List[Dict[str, Any]]:
+    if isinstance(plan.get("search_queries"), list):
+        return [item for item in plan["search_queries"] if isinstance(item, dict)]
     result: List[Dict[str, Any]] = []
     for key in ("official_sources", "internet_sources"):
         items = plan.get(key)
@@ -248,19 +252,31 @@ def normalize_websearch_item(result: Dict[str, Any], plan_source: Dict[str, Any]
     }
 
 
-def search_with_fallback(
+
+def is_timeout_exception(exc: Exception) -> bool:
+    if isinstance(exc, (TimeoutError, socket.timeout)):
+        return True
+    reason = getattr(exc, "reason", None)
+    if isinstance(reason, (TimeoutError, socket.timeout)):
+        return True
+    text = str(exc).lower()
+    return "timed out" in text or "timeout" in text
+
+
+def execute_provider_batch(
     *,
     base_url: str,
-    query: str,
-    domain: Optional[str],
-    count: Optional[int],
-    time_range: Optional[str],
+    provider: str,
+    queries: List[Dict[str, Any]],
     timeout_seconds: int,
-) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Optional[str]]:
-    attempts: List[Dict[str, Any]] = []
-    effective_provider: Optional[str] = None
-    final_items: List[Dict[str, Any]] = []
-    for provider in PROVIDERS:
+) -> Dict[int, Dict[str, Any]]:
+    results: Dict[int, Dict[str, Any]] = {}
+
+    def _run_one(index: int, query_item: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
+        query = str(query_item.get("query") or "")
+        domain = query_item.get("domain")
+        count = query_item.get("count")
+        time_range = query_item.get("time_range")
         try:
             response = search_with_provider(
                 base_url=base_url,
@@ -272,27 +288,39 @@ def search_with_fallback(
                 timeout_seconds=timeout_seconds,
             )
             normalized_items = normalize_search_items(provider, response)
-            attempts.append(
-                {
+            return index, {
+                "attempt": {
                     "provider": provider,
                     "status": "ok" if normalized_items else "empty",
                     "result_count": len(normalized_items),
-                }
-            )
-            if normalized_items:
-                effective_provider = provider
-                final_items = normalized_items
-                break
+                },
+                "items": normalized_items,
+            }
         except Exception as exc:
-            attempts.append(
-                {
+            status = "timeout" if is_timeout_exception(exc) else "error"
+            return index, {
+                "attempt": {
                     "provider": provider,
-                    "status": "error",
+                    "status": status,
                     "result_count": 0,
                     "error": str(exc),
-                }
-            )
-    return attempts, final_items, effective_provider
+                },
+                "items": [],
+            }
+
+    if not queries:
+        return results
+
+    max_workers = min(max(len(queries), 1), 8)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [
+            executor.submit(_run_one, index, query_item)
+            for index, query_item in enumerate(queries)
+        ]
+        for future in concurrent.futures.as_completed(futures):
+            index, query_result = future.result()
+            results[index] = query_result
+    return results
 
 
 def execute_websearch_plan(
@@ -309,6 +337,8 @@ def execute_websearch_plan(
     duplicate_count = 0
     skipped_invalid_count = 0
     effective_provider_counter: Dict[str, int] = {"baidu": 0, "tavily": 0}
+
+    planned_queries: List[Dict[str, Any]] = []
     for plan_source in iter_plan_sources(web_plan):
         query = normalize_whitespace(plan_source.get("query"))
         if not query:
@@ -316,17 +346,81 @@ def execute_websearch_plan(
         domain = normalize_whitespace(plan_source.get("domain"))
         count = int(plan_source.get("count") or default_count or 0) or None
         time_range = normalize_whitespace(plan_source.get("time_range") or default_time_range)
-        log_progress(
-            f"执行查询: query={query} domain={domain or 'none'} count={count or 'default'} time_range={time_range or 'none'}"
+        planned_queries.append(
+            {
+                "plan_source": plan_source,
+                "query": query,
+                "domain": domain,
+                "count": count,
+                "time_range": time_range,
+            }
         )
-        attempts, raw_items, effective_provider = search_with_fallback(
+
+    if planned_queries:
+        log_progress(f"第一阶段并发查询 provider=baidu query_count={len(planned_queries)}")
+    baidu_results = execute_provider_batch(
+        base_url=base_url,
+        provider="baidu",
+        queries=planned_queries,
+        timeout_seconds=timeout_seconds,
+    )
+
+    fallback_indexes: List[int] = []
+    query_states: List[Dict[str, Any]] = []
+    for index, query_item in enumerate(planned_queries):
+        baidu_result = baidu_results.get(index) or {
+            "attempt": {"provider": "baidu", "status": "error", "result_count": 0, "error": "missing result"},
+            "items": [],
+        }
+        attempt = baidu_result["attempt"]
+        effective_provider = "baidu" if attempt["status"] == "ok" else None
+        raw_items = baidu_result["items"] if effective_provider else []
+        if attempt["status"] in {"empty", "timeout"}:
+            fallback_indexes.append(index)
+        query_states.append(
+            {
+                "plan_source": query_item["plan_source"],
+                "query": query_item["query"],
+                "domain": query_item["domain"],
+                "count": query_item["count"],
+                "time_range": query_item["time_range"],
+                "attempts": [attempt],
+                "effective_provider": effective_provider,
+                "raw_items": raw_items,
+            }
+        )
+
+    fallback_queries = [planned_queries[index] for index in fallback_indexes]
+    if fallback_queries:
+        log_progress(f"第二阶段并发查询 provider=tavily fallback_query_count={len(fallback_queries)}")
+        tavily_results = execute_provider_batch(
             base_url=base_url,
-            query=query,
-            domain=domain,
-            count=count,
-            time_range=time_range,
+            provider="tavily",
+            queries=fallback_queries,
             timeout_seconds=timeout_seconds,
         )
+        for local_index, global_index in enumerate(fallback_indexes):
+            state = query_states[global_index]
+            tavily_result = tavily_results.get(local_index) or {
+                "attempt": {"provider": "tavily", "status": "error", "result_count": 0, "error": "missing result"},
+                "items": [],
+            }
+            tavily_attempt = tavily_result["attempt"]
+            state["attempts"].append(tavily_attempt)
+            if tavily_attempt["status"] == "ok":
+                state["effective_provider"] = "tavily"
+                state["raw_items"] = tavily_result["items"]
+
+    for state in query_states:
+        query = state["query"]
+        domain = state["domain"]
+        count = state["count"]
+        time_range = state["time_range"]
+        attempts = state["attempts"]
+        raw_items = state["raw_items"]
+        effective_provider = state["effective_provider"]
+        plan_source = state["plan_source"]
+
         log_progress(
             f"查询完成: query={query} effective_provider={effective_provider or 'none'} result_count={len(raw_items)}"
         )

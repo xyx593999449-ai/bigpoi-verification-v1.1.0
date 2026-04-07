@@ -48,6 +48,18 @@ internal_search:
   count: 10
   time_range: "OneYear"
 
+# ============================================================================
+# 内部网页读取代理接口配置（webreader）
+# ============================================================================
+internal_webreader:
+  enabled: true
+  base_url: "https://10.82.122.209:9081/botshop/proxy/webfetch"
+  timeout: 30
+  retry_count: 2
+  max_workers: 8
+  preferred_source: "jina"
+  fallback_source: "tavily"
+
 # Source 映射配置
 # 说明: 将内部使用的source标识映射到图商API的source参数
 source_mapping:

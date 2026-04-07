@@ -63,6 +63,7 @@ def main() -> int:
     parser.add_argument("-PoiPath", required=True)
     parser.add_argument("-InternalProxyPath", required=True)
     parser.add_argument("-WebSearchPath")
+    parser.add_argument("-WebReaderPath")
     parser.add_argument("-WebFetchPath")
     parser.add_argument("-VendorFallbackPaths", nargs="*")
     parser.add_argument("-OutputPath", required=True)
@@ -83,6 +84,7 @@ def main() -> int:
         "internal_proxy": {"amap": 0, "bmap": 0, "qmap": 0},
         "vendor_fallback": {},
         "websearch": 0,
+        "webreader": 0,
         "webfetch": 0,
     }
     internal_missing_vendors: list[str] = []
@@ -161,22 +163,31 @@ def main() -> int:
             test_evidence_seed(seed, str(poi["id"]), "websearch", errors)
             evidence_seeds.append(seed)
 
-    if args.WebFetchPath:
-        payload = read_json_file(args.WebFetchPath)
-        webfetch_context = require_context(payload, label="webfetch", expected_poi_id=str(poi["id"]), expected_run_id=resolved_run_id or None, allow_missing=not bool(resolved_run_id))
-        if not resolved_run_id and webfetch_context is not None:
-            resolved_run_id = str(webfetch_context.get("run_id") or "").strip()
-        if not resolved_task_id and webfetch_context is not None:
-            resolved_task_id = str(webfetch_context.get("task_id") or "").strip()
+    webreader_input_path = args.WebReaderPath or args.WebFetchPath
+    if webreader_input_path:
+        payload = read_json_file(webreader_input_path)
+        webreader_context = require_context(
+            payload,
+            label="webreader",
+            expected_poi_id=str(poi["id"]),
+            expected_run_id=resolved_run_id or None,
+            allow_missing=not bool(resolved_run_id),
+        )
+        if not resolved_run_id and webreader_context is not None:
+            resolved_run_id = str(webreader_context.get("run_id") or "").strip()
+        if not resolved_task_id and webreader_context is not None:
+            resolved_task_id = str(webreader_context.get("task_id") or "").strip()
         if not is_reviewed_generic_payload(payload):
-            raise ValueError("webfetch path must point to reviewed payload; raw webfetch payload cannot be merged directly")
+            raise ValueError("webreader path must point to reviewed payload; raw webreader payload cannot be merged directly")
         items = get_generic_items(payload)
-        branch_summary["webfetch"] = len(items)
+        branch_summary["webreader"] = len(items)
+        if args.WebFetchPath and not args.WebReaderPath:
+            branch_summary["webfetch"] = len(items)
         for item in items:
             if not isinstance(item, dict):
                 continue
-            seed = sanitize_evidence_seed(new_generic_evidence_seed(poi, item, "webfetch"))
-            test_evidence_seed(seed, str(poi["id"]), "webfetch", errors)
+            seed = sanitize_evidence_seed(new_generic_evidence_seed(poi, item, "webreader"))
+            test_evidence_seed(seed, str(poi["id"]), "webreader", errors)
             evidence_seeds.append(seed)
 
     if not evidence_seeds:

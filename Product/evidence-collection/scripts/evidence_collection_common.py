@@ -463,7 +463,7 @@ def new_generic_evidence_seed(poi: dict[str, Any], item: dict[str, Any], branch:
     )
     metadata["collection_branch"] = branch
     if "collection_method" not in metadata:
-        metadata["collection_method"] = "crawl" if branch == "webfetch" else "manual"
+        metadata["collection_method"] = "crawl" if branch in {"webfetch", "webreader"} else "manual"
 
     seed = {
         "poi_id": str(poi["id"]),
@@ -666,6 +666,7 @@ def infer_signal_origin(branch: Optional[str]) -> str:
     mapping = {
         "websearch": "websearch",
         "webfetch": "webfetch",
+        "webreader": "webreader",
         "map_vendor": "map_vendor",
         "internal_proxy": "map_vendor",
         "vendor_fallback": "map_vendor",

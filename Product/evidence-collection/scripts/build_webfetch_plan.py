@@ -43,8 +43,8 @@ def main() -> int:
         if not isinstance(item, dict):
             continue
         metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
-        fetch_url = normalize_whitespace(metadata.get("fetch_url") or item.get("source", {}).get("source_url"))
-        should_fetch = bool(metadata.get("should_fetch")) and bool(fetch_url)
+        fetch_url = normalize_whitespace(metadata.get("read_url") or metadata.get("fetch_url") or item.get("source", {}).get("source_url"))
+        should_fetch = bool(metadata.get("should_read") if metadata.get("should_read") is not None else metadata.get("should_fetch")) and bool(fetch_url)
         if not should_fetch:
             continue
         fetch_targets.append(

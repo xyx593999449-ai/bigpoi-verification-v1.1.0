@@ -96,4 +96,4 @@ def collect_item_run_ids(items: Iterable[Any]) -> Set[str]:
     return run_ids
 
 if __name__ == "__main__":
-    raise SystemExit("This module is import-only. Use build_web_source_plan.py, orchestrate_collection.py, websearch_adapter.py, call_internal_proxy.py, call_map_vendor.py, merge_evidence_collection_outputs.py, or write_evidence_output.py.")
+    raise SystemExit("This module is import-only. Use build_web_source_plan.py, build_webreader_plan.py, orchestrate_collection.py, websearch_adapter.py, webreader_adapter.py, call_internal_proxy.py, call_map_vendor.py, merge_evidence_collection_outputs.py, or write_evidence_output.py.")

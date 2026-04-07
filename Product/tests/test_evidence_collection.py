@@ -15,6 +15,7 @@ import prepare_map_review_input
 import validate_map_review_seed
 import validate_websearch_review_seed
 import write_websearch_review
+import build_webreader_plan
 
 FIXTURE_DIR = Path(__file__).resolve().parent
 
@@ -96,6 +97,62 @@ def test_websearch_adapter_fallback_from_baidu_to_tavily(monkeypatch):
     assert payload["result_count"] == 1
     assert payload["effective_provider"] == "tavily"
     assert payload["items"][0]["metadata"]["provider_attempts"] == ["baidu", "tavily"]
+
+
+def test_websearch_adapter_two_phase_parallel_fallback_scope(monkeypatch):
+    calls = []
+
+    def fake_search_with_provider(
+        *,
+        base_url,
+        provider,
+        query,
+        domain=None,
+        block_domain=None,
+        count=None,
+        time_range=None,
+        timeout_seconds=30,
+    ):
+        calls.append((provider, query))
+        if provider == "baidu":
+            if query == "q-ok":
+                return {"references": [{"url": "https://a.example.com", "title": "A", "snippet": "A"}]}
+            if query == "q-empty":
+                return {"references": []}
+            raise TimeoutError("request timed out")
+        if query == "q-empty":
+            return {"results": [{"url": "https://b.example.com", "title": "B", "content": "B"}]}
+        return {"results": []}
+
+    monkeypatch.setattr(websearch_adapter, "search_with_provider", fake_search_with_provider)
+    web_plan = {
+        "official_sources": [
+            {"source_name": "A", "source_type": "official", "source_url": "https://a.example.com", "query": "q-ok", "weight": 1.0},
+            {"source_name": "B", "source_type": "official", "source_url": "https://b.example.com", "query": "q-empty", "weight": 1.0},
+            {"source_name": "C", "source_type": "official", "source_url": "https://c.example.com", "query": "q-timeout", "weight": 1.0},
+        ],
+        "internet_sources": [],
+    }
+
+    payload = websearch_adapter.execute_websearch_plan(
+        web_plan=web_plan,
+        base_url="http://internal-search/api",
+        default_count=5,
+        default_time_range="30d",
+        timeout_seconds=5,
+    )
+
+    assert ("tavily", "q-ok") not in calls
+    assert ("tavily", "q-empty") in calls
+    assert ("tavily", "q-timeout") in calls
+    assert payload["query_count"] == 3
+    assert payload["result_count"] == 2
+
+    attempts_by_query = {item["query"]: item["attempts"] for item in payload["provider_attempts"]}
+    assert [attempt["provider"] for attempt in attempts_by_query["q-ok"]] == ["baidu"]
+    assert [attempt["provider"] for attempt in attempts_by_query["q-empty"]] == ["baidu", "tavily"]
+    assert [attempt["provider"] for attempt in attempts_by_query["q-timeout"]] == ["baidu", "tavily"]
+    assert attempts_by_query["q-timeout"][0]["status"] == "timeout"
 
 
 def test_internal_search_client_normalizes_baidu_minimal_fields():
@@ -408,3 +465,158 @@ def test_validate_websearch_review_seed_rejects_non_poi_body_relevant_items():
 
     with pytest.raises(ValueError, match="entity_relation must be poi_body"):
         validate_websearch_review_seed.validate_websearch_review_seed_against_catalog(catalog, review_seed)
+
+
+def test_websearch_adapter_prefers_search_queries_block(monkeypatch):
+    calls = []
+
+    def fake_search_with_provider(
+        *,
+        base_url,
+        provider,
+        query,
+        domain=None,
+        block_domain=None,
+        count=None,
+        time_range=None,
+        timeout_seconds=30,
+    ):
+        calls.append((provider, query, domain))
+        return {"references": [{"url": "https://www.example.gov.cn/a", "title": "某市人民政府", "snippet": "某市人民政府"}]}
+
+    monkeypatch.setattr(websearch_adapter, "search_with_provider", fake_search_with_provider)
+    payload = websearch_adapter.execute_websearch_plan(
+        web_plan={
+            "official_sources": [
+                {"source_name": "旧字段", "source_type": "official", "source_url": "https://legacy.example.com", "query": "legacy query"},
+            ],
+            "search_queries": [
+                {
+                    "source_name": "新字段",
+                    "source_type": "official",
+                    "source_url": "https://www.example.gov.cn",
+                    "query": "深圳市 南山区人民政府 办公地址",
+                    "query_intent": "office_address",
+                    "domain": "www.example.gov.cn",
+                    "weight": 1.0,
+                }
+            ],
+        },
+        base_url="http://internal-search/api",
+        default_count=5,
+        default_time_range="OneYear",
+        timeout_seconds=5,
+    )
+
+    assert payload["query_count"] == 1
+    assert payload["result_count"] == 1
+    assert calls[0][1] == "深圳市 南山区人民政府 办公地址"
+    assert calls[0][2] == "www.example.gov.cn"
+
+
+def test_write_websearch_review_outputs_should_read_and_legacy_fetch(tmp_path: Path):
+    raw_payload = {
+        "status": "ok",
+        "items": [
+            {
+                "source": {
+                    "source_id": "WEBSEARCH_OFFICIAL_BAIDU_1",
+                    "source_name": "宝安区政府在线",
+                    "source_type": "official",
+                    "source_url": "http://www.baoan.gov.cn/xxgk/",
+                    "weight": 1.0,
+                },
+                "data": {"name": "深圳市宝安区人民政府"},
+                "metadata": {"signal_origin": "websearch"},
+            }
+        ],
+        "context": {"run_id": "run_mock", "poi_id": "poi_mock", "created_at": "2026-04-01T00:00:00Z"},
+    }
+    review_seed = {
+        "items": [
+            {
+                "result_id": "WEB_001",
+                "is_relevant": True,
+                "confidence": 0.91,
+                "reason": "标题和摘要均指向目标政府机关",
+                "source_type": "official",
+                "entity_relation": "poi_body",
+                "evidence_ready": True,
+                "should_read": True,
+                "read_url": "http://www.baoan.gov.cn/xxgk/",
+                "extracted": {"name": "深圳市宝安区人民政府"},
+            }
+        ]
+    }
+
+    raw_path = tmp_path / "websearch-raw.json"
+    review_seed_path = tmp_path / "websearch-review-seed.json"
+    out_path = tmp_path / "websearch-reviewed.json"
+    raw_path.write_text(json.dumps(raw_payload, ensure_ascii=False), encoding="utf-8")
+    review_seed_path.write_text(json.dumps(review_seed, ensure_ascii=False), encoding="utf-8")
+
+    with patch(
+        "sys.argv",
+        [
+            "write_websearch_review.py",
+            "-WebSearchRawPath",
+            str(raw_path),
+            "-ReviewSeedPath",
+            str(review_seed_path),
+            "-OutputPath",
+            str(out_path),
+        ],
+    ):
+        assert write_websearch_review.main() == 0
+
+    reviewed = json.loads(out_path.read_text(encoding="utf-8"))
+    metadata = reviewed["items"][0]["metadata"]
+    assert metadata["should_read"] is True
+    assert metadata["read_url"] == "http://www.baoan.gov.cn/xxgk/"
+    assert metadata["should_fetch"] is True
+    assert metadata["fetch_url"] == "http://www.baoan.gov.cn/xxgk/"
+
+
+def test_build_webreader_plan_combines_direct_read_and_followup(tmp_path: Path):
+    web_plan = {
+        "direct_read_sources": [
+            {
+                "source_name": "官网",
+                "source_type": "official",
+                "source_url": "https://www.szns.gov.cn/",
+                "read_intents": ["办公地址", "联系电话"],
+            }
+        ]
+    }
+    websearch_reviewed = {
+        "items": [
+            {
+                "source": {"source_name": "搜索页", "source_type": "official", "source_url": "https://www.szns.gov.cn/xxgk"},
+                "metadata": {"result_id": "WEB_001", "should_read": True, "read_url": "https://www.szns.gov.cn/xxgk"},
+            }
+        ]
+    }
+    web_plan_path = tmp_path / "web-plan.json"
+    websearch_reviewed_path = tmp_path / "websearch-reviewed.json"
+    out_path = tmp_path / "webreader-plan.json"
+    web_plan_path.write_text(json.dumps(web_plan, ensure_ascii=False), encoding="utf-8")
+    websearch_reviewed_path.write_text(json.dumps(websearch_reviewed, ensure_ascii=False), encoding="utf-8")
+
+    with patch(
+        "sys.argv",
+        [
+            "build_webreader_plan.py",
+            "-WebPlanPath",
+            str(web_plan_path),
+            "-WebSearchReviewedPath",
+            str(websearch_reviewed_path),
+            "-OutputPath",
+            str(out_path),
+        ],
+    ):
+        assert build_webreader_plan.main() == 0
+
+    plan = json.loads(out_path.read_text(encoding="utf-8"))
+    assert plan["status"] == "ok"
+    assert len(plan["read_targets"]) == 2
+    assert {item["read_reason"] for item in plan["read_targets"]} == {"direct_read", "search_followup"}

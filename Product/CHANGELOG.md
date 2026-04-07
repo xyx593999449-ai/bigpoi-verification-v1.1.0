@@ -1,5 +1,43 @@
 # Product CHANGELOG
 
+## [1.10.8] - 2026-04-07
+### Added
+- 新增 `webreader` 主线脚本：
+  - `evidence-collection/scripts/build_webreader_plan.py`
+  - `evidence-collection/scripts/webreader_adapter.py`
+  - `evidence-collection/scripts/prepare_webreader_review_input.py`
+  - `evidence-collection/scripts/validate_webreader_review_seed.py`
+  - `evidence-collection/scripts/write_webreader_review.py`
+- 新增 `evidence-collection/prompts/webreader_extract.md`，用于 `webreader` review 提取。
+
+### Changed
+- `build_web_source_plan.py` 新增 `direct_read_sources` 与 `search_queries` 输出结构；政府机关场景默认 query intent 收敛为 `办公地址` 与 `联系电话`。
+- 修正 `direct_read` 行为：可直读来源不再进入 `search_queries`，满足“已知权威 URL 直读优先且不先走 websearch”。
+- `websearch_adapter.py` 优先消费 `search_queries`；`websearch` review 元字段升级为 `should_read/read_url`（兼容旧 `should_fetch/fetch_url`）。
+- `orchestrate_collection.py` 接入 `webreader` 内置执行链路（`build plan -> adapter -> prepare/validate/write review`），并新增 `-WebReaderPath`、`-WebReaderReviewSeedPath` 参数。
+- `orchestrate_collection.py` 在 `search_queries=0` 时跳过 `websearch` 阶段，减少无效调用。
+- `merge_evidence_collection_outputs.py` 新增 `-WebReaderPath`，归并分支统一为 `webreader`；保留 `-WebFetchPath` 兼容旧调用。
+- `evidence_collection_common.py` 补充 `signal_origin=webreader` 与 `webreader` 分支的 `collection_method`。
+
+### Docs
+- `Product/README.md` 与 `evidence-collection/SKILL.md` 更新为 `webreader` 主链路说明，同时保留 `webfetch` 兼容提示。
+- [docs/Product_webreader_replacement_plan_20260407.md](/Users/liubai/Documents/project/ft_project/datamalo/big_poi/docs/Product_webreader_replacement_plan_20260407.md) 补充关键节点数据交换规格与参数兼容说明。
+
+## [1.10.7] - 2026-04-07
+### Docs
+- 新增 [docs/Product_webreader_replacement_plan_20260407.md](/Users/liubai/Documents/project/ft_project/datamalo/big_poi/docs/Product_webreader_replacement_plan_20260407.md)，明确 `websearch` 保留、`webfetch` 替换为 `webreader` 的需求背景、职责边界与推荐改造方案。
+- `Product/README.md` 补充 `websearch` / `webreader` 职责边界章节，明确当前应替换的是页面增强层而不是搜索发现层。
+- 继续补充方案：明确 web 计划层后续采用 `direct_read + search_discovery` 双通道，并规定框架适配所有类型、首批重点先做政府机关，政府 query 首批只聚焦 `办公地址` 与 `联系电话`。
+- 继续补充 `webreader` 内部接口协议，明确 `Jina-Reader` 与 `Tavily-Extract` 共用内部网关、参数差异、输出差异与推荐接入策略。
+- 收紧 `webreader` provider 调度策略：先由 `Jina-Reader` 对全部 URL 并行抓取，仅对失败 URL 再由 `Tavily-Extract` 并行回退，以兼顾国内政府机关站点可达性与整体效率。
+
+## [1.10.6] - 2026-04-03
+### Changed
+- `evidence-collection/scripts/websearch_adapter.py` 的 provider 调度改为“两阶段并发”：先并行执行所有 `baidu` query，再仅对超时/空结果 query 并行回退 `tavily`。
+
+### Tests
+- `Product/tests/test_evidence_collection.py` 新增 `test_websearch_adapter_two_phase_parallel_fallback_scope`，覆盖“仅超时/空结果触发二阶段回退”的行为约束。
+
 ## [1.10.5] - 2026-04-02
 ### Fixed
 - 修正 `skills-bigpoi-verification/scripts/bundle_common.py` 在 Python 3.9 下对 `Path.write_text(..., newline=...)` 的不兼容调用，避免 `write_result_bundle.py` 成包阶段因 `unexpected keyword argument 'newline'` 失败。

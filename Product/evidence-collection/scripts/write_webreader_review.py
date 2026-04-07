@@ -14,23 +14,18 @@ if str(SCRIPT_DIR) not in sys.path:
 from run_context import attach_context, get_context
 from evidence_collection_common import (
     ensure_stdout_utf8,
-    get_generic_items,
     normalize_text,
     normalize_whitespace,
     read_json_file,
     utc_iso_now,
     write_json_file,
 )
-from validate_websearch_review_seed import build_catalog_from_raw_payload, validate_websearch_review_seed_against_catalog
+from validate_webreader_review_seed import build_catalog_from_review_input, validate_webreader_review_seed_against_catalog
 
 
 def log_progress(message: str) -> None:
-    sys.stderr.write(f"[write-websearch-review] {message}\n")
+    sys.stderr.write(f"[write-webreader-review] {message}\n")
     sys.stderr.flush()
-
-
-def build_result_id(index: int) -> str:
-    return f"WEB_{index + 1:03d}"
 
 
 def normalize_review_map(review_seed: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
@@ -46,49 +41,38 @@ def normalize_review_map(review_seed: Dict[str, Any]) -> Dict[str, Dict[str, Any
     return mapping
 
 
-def is_mergeable_review_item(review_item: Dict[str, Any]) -> bool:
-    if not bool(review_item.get("is_relevant")):
-        return False
-    return normalize_whitespace(review_item.get("entity_relation")) == "poi_body"
+def build_result_id(index: int) -> str:
+    return f"WR_{index + 1:03d}"
 
 
 def build_reviewed_item(raw_item: Dict[str, Any], review_item: Dict[str, Any]) -> Dict[str, Any]:
     source = dict(raw_item.get("source") if isinstance(raw_item.get("source"), dict) else {})
-    raw_data = dict(raw_item.get("data") if isinstance(raw_item.get("data"), dict) else {})
     metadata = dict(raw_item.get("metadata") if isinstance(raw_item.get("metadata"), dict) else {})
+    raw_page = dict(raw_item.get("raw_page") if isinstance(raw_item.get("raw_page"), dict) else {})
     extracted = review_item.get("extracted") if isinstance(review_item.get("extracted"), dict) else {}
 
     data = {
-        "name": normalize_text(extracted.get("name") or raw_data.get("name")),
+        "name": normalize_text(extracted.get("name") or source.get("source_name")),
     }
     for field in ("address", "phone", "category", "status", "level"):
-        value = normalize_text(extracted.get(field) or raw_data.get(field))
+        value = normalize_text(extracted.get(field))
         if value:
             data[field] = value
 
-    if isinstance(raw_data.get("coordinates"), dict):
-        data["coordinates"] = raw_data["coordinates"]
-
-    metadata["signal_origin"] = "websearch"
+    metadata["signal_origin"] = "webreader"
     metadata["review_status"] = "approved"
-    metadata["review_reason"] = normalize_text(review_item.get("reason")) or "relevant_websearch_result"
-    metadata["entity_relation"] = normalize_text(review_item.get("entity_relation")) or "poi_body"
+    metadata["review_reason"] = normalize_text(review_item.get("reason")) or "relevant_webreader_result"
     metadata["result_id"] = str(review_item.get("result_id"))
-    should_read = bool(review_item.get("should_read")) if review_item.get("should_read") is not None else bool(review_item.get("should_fetch"))
-    metadata["should_read"] = should_read
-    metadata["should_fetch"] = should_read
-    read_url = normalize_whitespace(review_item.get("read_url") or review_item.get("fetch_url"))
-    if read_url:
-        metadata["read_url"] = read_url
-        metadata["fetch_url"] = read_url
-    if normalize_whitespace(extracted.get("category_hint")):
-        metadata["level_hint"] = str(extracted["category_hint"])
+    metadata["existence_status"] = normalize_text(review_item.get("existence_status")) or "unknown"
+    metadata["webreader_provider"] = raw_item.get("provider")
+    metadata["page_title"] = normalize_text(raw_page.get("title")) or metadata.get("page_title")
+    metadata["text_snippet"] = normalize_text(raw_page.get("description")) or metadata.get("text_snippet")
     if normalize_whitespace(extracted.get("email")):
         metadata["email"] = str(extracted["email"])
 
     verification = {
         "is_valid": True,
-        "confidence": float(review_item.get("confidence") or source.get("weight") or 0.6),
+        "confidence": float(review_item.get("confidence") or source.get("weight") or 0.65),
     }
 
     return {
@@ -103,7 +87,8 @@ def build_reviewed_item(raw_item: Dict[str, Any], review_item: Dict[str, Any]) -
 def main() -> int:
     ensure_stdout_utf8()
     parser = argparse.ArgumentParser()
-    parser.add_argument("-WebSearchRawPath", required=True)
+    parser.add_argument("-WebReaderRawPath", required=True)
+    parser.add_argument("-WebReaderReviewInputPath", required=True)
     parser.add_argument("-ReviewSeedPath", required=True)
     parser.add_argument("-OutputPath", required=True)
     parser.add_argument("-PoiId")
@@ -111,24 +96,28 @@ def main() -> int:
     parser.add_argument("-RunId")
     args = parser.parse_args()
 
-    raw_payload = read_json_file(args.WebSearchRawPath)
+    raw_payload = read_json_file(args.WebReaderRawPath)
+    review_input = read_json_file(args.WebReaderReviewInputPath)
     review_seed = read_json_file(args.ReviewSeedPath)
     if not isinstance(raw_payload, dict):
-        raise ValueError("websearch raw payload must be an object")
+        raise ValueError("webreader raw payload must be an object")
+    if not isinstance(review_input, dict):
+        raise ValueError("webreader review input must be an object")
     if not isinstance(review_seed, dict):
-        raise ValueError("review seed must be an object")
+        raise ValueError("webreader review seed must be an object")
 
     raw_context = get_context(raw_payload) or {}
     resolved_run_id = str(args.RunId or raw_context.get("run_id") or "").strip()
     resolved_poi_id = str(args.PoiId or raw_context.get("poi_id") or "").strip()
     resolved_task_id = str(args.TaskId or raw_context.get("task_id") or "").strip()
 
-    validate_websearch_review_seed_against_catalog(build_catalog_from_raw_payload(raw_payload), review_seed)
+    validate_webreader_review_seed_against_catalog(build_catalog_from_review_input(review_input), review_seed)
     review_map = normalize_review_map(review_seed)
+    raw_items = raw_payload.get("items") if isinstance(raw_payload.get("items"), list) else []
+
     reviewed_items = []
     dropped_count = 0
-    filtered_by_relation_count = 0
-    for index, raw_item in enumerate(get_generic_items(raw_payload)):
+    for index, raw_item in enumerate(raw_items):
         if not isinstance(raw_item, dict):
             continue
         result_id = build_result_id(index)
@@ -139,10 +128,6 @@ def main() -> int:
         if not bool(review_item.get("is_relevant")):
             dropped_count += 1
             continue
-        if not is_mergeable_review_item(review_item):
-            dropped_count += 1
-            filtered_by_relation_count += 1
-            continue
         reviewed_items.append(build_reviewed_item(raw_item, review_item))
 
     output = {
@@ -152,7 +137,6 @@ def main() -> int:
         "review_summary": {
             "kept_count": len(reviewed_items),
             "dropped_count": dropped_count,
-            "filtered_by_relation_count": filtered_by_relation_count,
         },
     }
     if resolved_run_id and resolved_poi_id:
@@ -164,11 +148,7 @@ def main() -> int:
         "result_path": str(Path(args.OutputPath).resolve()),
         "kept_count": len(reviewed_items),
         "dropped_count": dropped_count,
-        "filtered_by_relation_count": filtered_by_relation_count,
-        "summary_text": (
-            f"websearch review 写出完成：保留 {len(reviewed_items)} 条，"
-            f"剔除 {dropped_count} 条，其中弱相关过滤 {filtered_by_relation_count} 条。"
-        ),
+        "summary_text": f"webreader review 写出完成：保留 {len(reviewed_items)} 条，剔除 {dropped_count} 条。",
     }
     log_progress(result["summary_text"])
     json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
