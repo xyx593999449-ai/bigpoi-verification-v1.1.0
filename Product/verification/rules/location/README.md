@@ -76,7 +76,7 @@ d = R * c
 
 - **输入坐标系**：支持WGS84、GCJ02、BD09
 - **标准输出坐标系**：GCJ02（国测局坐标系）
-- **转换时机**：证据归并与规范化阶段（evidence-collection/scripts/merge_evidence_collection_outputs.py）
+- **转换时机**：证据归并与规范化阶段（evidence-collection-merge/scripts/merge_evidence_collection_outputs.py）
 
 ## 规则应用顺序
 

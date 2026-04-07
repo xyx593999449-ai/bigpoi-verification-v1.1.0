@@ -4,7 +4,7 @@
 
 本仓库按 `Product / Quality` 双域组织 BigPOI 核验相关技能。
 
-- `Product/` 负责正式核验链路，包括证据采集、核验决策、结果打包与回库。
+- `Product/` 负责正式核验链路，包括证据收集、核验决策、结果打包与回库。
 - `Quality/` 负责 QC 质量复核链路，包括 QC 判定、结果持久化与回库。
 
 仓库目标是把 POI 从原始输入推进到可落库、可追溯、可复核的结构化结果，并通过 README / CHANGELOG 维护各层入口文档。
@@ -22,21 +22,25 @@
 ## 3. 域划分
 
 ### 3.1 Develop
+
 负责全系统的异步驱动与容灾分发：
+
 - `generate-batch/`
 - `worker/`
 
 ### 3.2 Product
 
-包含 5 个核心技能：
+包含 7 个核心技能：
 
 - `skills-bigpoi-verification/`
 - `evidence-collection/`
-- `evidence_collection_v2/`
+- `evidence-collection-web/`
+- `evidence-collection-map/`
+- `evidence-collection-merge/`
 - `verification/`
 - `write-pg-verified/`
 
-### 3.2 Quality
+### 3.3 Quality
 
 包含 2 个核心技能：
 
@@ -49,7 +53,7 @@
 flowchart TD
     DB["PostgreSQL 库"] --> |"Batch 推流"| Q["Celery Redis 消息队列"]
     Q --> |"Worker 并发消费"| A["Develop: celery_worker"]
-    A --> B["Product: evidence-collection (AsyncIO 并发取证 & 脱水)"]
+    A --> B["Product: evidence-collection (调度 web/map/merge 子技能)"]
     B --> C["Product: verification (authority 分类增强与低置信度结构化降级)"]
     C --> D["Product: skills-bigpoi-verification (包裹成结果包)"]
     D --> E["Product: write-pg-verified"]
@@ -71,25 +75,10 @@ flowchart TD
 - Quality 侧新增规则、schema、回库字段时，先更新 `Quality/README.md` 与对应技能文档。
 - 涉及跨域流程变更时，同时更新本文件和受影响域的 CHANGELOG。
 
-## 7. 最近迭代提醒（2026-04-01）
+## 7. 当前 Product 主线（2026-04-07）
 
-- Product `evidence-collection` 的 `websearch` 执行策略已调整为“两阶段并发”：先并行执行全部 `baidu` 查询，再仅对超时/无返回 query 并行回退 `tavily`。
-- Product `evidence-collection` 已新增内部搜索代理适配层，`websearch` 默认执行 `baidu -> tavily` 回退策略。
-- Product `verification` 已移除低置信度硬中断，authority 场景改为正式输出 `manual_review / downgraded`。
-- Product `evidence-collection` 已进入二期主控收敛，新增统一 orchestrator 程序化调度证据收集链路。
-- Product `evidence-collection` 已补齐 reviewed gate：图商与 `websearch` 在存在候选时必须先经过模型 review 与 seed 校验，raw 结果不能再直接并入 formal evidence。
-- Product `websearch` review 现在要求显式声明 `entity_relation`，只有目标 POI 本体页面才允许进入 formal evidence。
-
-## 8. 当前改造共识（2026-04-07）
-
-- Product `websearch` 内部代理继续保留，职责是按 `query` 获取候选网站、标题、摘要与候选 URL。
-- 当前 Product `webfetch` 的业务位置被重新定义为“页面增强层”，后续将由 `webreader` 内部代理接管，职责是按指定 `url` 读取页面信息。
-- Product web 侧后续将拆成 `direct_read + search_discovery` 两类来源：配置中已知的权威 URL 优先 direct read，未知页面再走 `websearch`。
-- 框架设计上需要适配所有类型，但首批迭代重点先聚焦政府机关类目；政府机关 query 首批只聚焦 `办公地址` 与 `联系电话`。
-- Product `webreader` 已明确使用内部网关 `botshop/proxy/webfetch` 接入，当前方案采用“两阶段并发”：先全部 URL 通过 `Jina` 并行抓取，再仅对失败 URL 通过 `Tavily-Extract` 并行回退。
-- Product `evidence-collection` 现已落地 `webreader` 主线脚本：`build_webreader_plan.py`、`webreader_adapter.py`、`prepare/validate/write_webreader_review.py`，并在 `orchestrate_collection.py` 与 `merge_evidence_collection_outputs.py` 中接入 `-WebReaderPath`（兼容 `-WebFetchPath`）。
-- `websearch` review 的增强信号字段已升级为 `should_read/read_url`（兼容旧字段 `should_fetch/fetch_url`）。
-- 图商链路不在本轮替换范围内，保持独立分支。
-- 本轮需求与建议改造方案已落盘到 [docs/Product_webreader_replacement_plan_20260407.md](/Users/liubai/Documents/project/ft_project/datamalo/big_poi/docs/Product_webreader_replacement_plan_20260407.md)。
-- Product 同步新增 `evidence_collection_v2/`，用 Claude Code skill 结构把证据收集拆为主编排、web 分支、map 分支与 merge 四个 skill，并通过两个 project subagent 支撑并发执行。
-- `evidence_collection_v2/` 当前已补 `scripts/run_parallel_claude_agents.py`，主编排会参考 `Develop/row-batch/scripts/run_claude.py` 的方式，通过两个 `claude -p` worker 并发执行 web 与 map 分支。
+- `evidence-collection` 是 Product 侧唯一正式证据收集入口，内部再编排 `evidence-collection-web`、`evidence-collection-map` 与 `evidence-collection-merge` 三个子技能。
+- `evidence-collection/scripts/run_parallel_claude_agents.py` 参考 `Develop/row-batch/scripts/run_claude.py`，通过两个 `claude -p` worker 并发执行 web 与图商分支。
+- web 分支优先使用模型内置 `WebSearch / WebFetch`；仅在当前运行环境不可用时，才回退到内部代理 Python 脚本。
+- `claude -p` 调用日志统一落到 `output/results/{task_id}/claude-agent-logs/`，便于和正式结果目录一起排障留档。
+- Product 技能工程化定稿方案见 [docs/Product_skill_engineering_finalization_plan_20260407.md](/Users/liubai/Documents/project/ft_project/datamalo/big_poi/docs/Product_skill_engineering_finalization_plan_20260407.md)。
