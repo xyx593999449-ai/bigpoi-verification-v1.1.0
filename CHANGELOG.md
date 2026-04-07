@@ -5,6 +5,7 @@
 ### Added
 - Product 新增 `evidence_collection_v2/` 目录，开始以 Claude Code skill 结构试运行证据收集 v2 编排层。
 - 新增 4 个 v2 skill 与 2 个 project subagent，用于支持“主编排 + web/map 双分支并发 + merge 收口”的执行方式。
+- Product 新增 `evidence_collection_v2/scripts/run_parallel_claude_agents.py`，参考 `Develop/row-batch/scripts/run_claude.py`，改为通过两个 `claude -p` worker 并发执行 web 与 map 分支。
 
 ### Docs
 - 更新仓库级 `README.md` 与 Product 域 `README.md / CHANGELOG.md`，补充 `evidence_collection_v2` 的目录入口与运行定位。

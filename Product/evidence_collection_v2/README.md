@@ -2,11 +2,11 @@
 
 ## 1. 目标
 
-`evidence_collection_v2/` 用于把现有 `Product/evidence-collection/` 的大一统证据收集 skill 拆成“主编排 + 双分支并发 + merge 收口”的 skill 结构。
+`evidence_collection_v2/` 用于把现有 `Product/evidence-collection/` 的大一统证据收集 skill 拆成“主编排 + 双 worker 并发 + merge 收口”的 skill 结构。
 
 本目录本身不替换既有 Python 脚本，而是复用现有正式脚本，把 skill 层拆成 4 个职责明确的运行单元：
 
-- `product-evidence-intel-v2`：主编排 skill，负责初始化 run context、并发拉起两个 agent、等待结果并触发 merge。
+- `product-evidence-intel-v2`：主编排 skill，负责初始化 run context，并通过 `claude -p` 并发拉起两个 worker、等待结果并触发 merge。
 - `product-evidence-web-v2`：`websearch + webreader` 分支 skill。
 - `product-evidence-map-v2`：内部图商代理 + 缺失图商补采 + map review 分支 skill。
 - `product-evidence-merge-v2`：汇总两条 reviewed 分支并写出正式 `evidence_*.json` 的 merge skill。
@@ -16,10 +16,13 @@
 ```text
 Product/evidence_collection_v2/
 ├── README.md
+├── scripts/
+│   └── run_parallel_claude_agents.py
 └── .claude/
     ├── agents/
     │   ├── product-map-researcher-v2.md
     │   └── product-web-researcher-v2.md
+    ├── settings.json
     └── skills/
         ├── product-evidence-intel-v2/
         │   └── SKILL.md
@@ -43,6 +46,29 @@ Product/evidence_collection_v2/
 ```text
 /product-evidence-intel-v2 <input-poi-json-path>
 ```
+
+### 3.1 Claude Code 权限设置
+
+为避免运行时出现“因 python 执行限制失败”，本目录已补充：
+
+- `Product/evidence_collection_v2/.claude/settings.json`
+
+当前最小放行项包括：
+
+- `Bash(claude:*)`
+- `Bash(python:*)`
+- `Bash(python3:*)`
+- `Bash(git rev-parse:*)`
+- `Bash(pwd)`
+- `Bash(ls:*)`
+- `Bash(find:*)`
+- `Bash(cat:*)`
+
+并额外开放以下目录访问，便于 v2 skills 调用现有正式脚本：
+
+- `../evidence-collection`
+- `../skills-bigpoi-verification`
+- `../../docs`
 
 ## 4. 运行契约
 
@@ -90,13 +116,14 @@ merge skill 完成后，必须落盘：
 ## 5. 推荐执行流
 
 1. 主 skill 初始化 run context。
-2. 主 skill 同时启动：
-   - `product-web-researcher-v2`
-   - `product-map-researcher-v2`
-3. 两个 agent 各自落 reviewed 结果和分支结果文件。
-4. 主 skill 读取两个分支结果文件。
-5. 主 skill 触发 `product-evidence-merge-v2`。
-6. merge skill 调用现有正式脚本，输出唯一正式产物 `evidence_path`。
+2. 主 skill 调用 `scripts/run_parallel_claude_agents.py`。
+3. helper 脚本内部通过两个 `claude -p` worker 分别执行：
+   - `product-evidence-web-v2`
+   - `product-evidence-map-v2`
+4. 两个 worker 各自落 reviewed 结果和分支结果文件。
+5. 主 skill 读取两个分支结果文件。
+6. 主 skill 触发 `product-evidence-merge-v2`。
+7. merge skill 调用现有正式脚本，输出唯一正式产物 `evidence_path`。
 
 ## 6. 边界约束
 

@@ -3,6 +3,8 @@
 ## [1.10.9] - 2026-04-07
 ### Added
 - 新增 `Product/evidence_collection_v2/`，作为证据收集 skill 拆分试运行目录。
+- 新增 `Product/evidence_collection_v2/.claude/settings.json`，为 v2 运行时最小放行 `python/python3/git rev-parse/pwd/ls/find/cat` 等 Bash 权限，并补充对 `evidence-collection` 与 `skills-bigpoi-verification` 的目录访问。
+- 新增 `Product/evidence_collection_v2/scripts/run_parallel_claude_agents.py`，参考 `Develop/row-batch/scripts/run_claude.py`，由主编排通过 `claude -p` 并发拉起 `product-evidence-web-v2` 与 `product-evidence-map-v2` 两个 worker。
 - 新增 v2 skills：
   - `product-evidence-intel-v2`
   - `product-evidence-web-v2`
@@ -14,7 +16,7 @@
 - 新增 `Product/evidence_collection_v2/README.md`，说明 v2 目录目标、运行方式、输出契约与推荐执行流。
 
 ### Docs
-- `Product/README.md` 增补 `evidence_collection_v2` 入口、目录说明与 v2 skill 拆分章节，明确当前采用“主编排 + 双分支 agent + merge skill” 的运行结构。
+- `Product/README.md` 增补 `evidence_collection_v2` 入口、目录说明与 v2 skill 拆分章节，明确当前采用“主编排 + `claude -p` 双 worker + merge skill” 的运行结构。
 
 ## [1.10.8] - 2026-04-07
 ### Added

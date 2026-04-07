@@ -139,8 +139,7 @@
   - `product-evidence-web-v2`
   - `product-evidence-map-v2`
   - `product-evidence-merge-v2`
-- v2 同时新增 2 个 project subagent：
-  - `product-web-researcher-v2`
-  - `product-map-researcher-v2`
-- 推荐执行流为“主 skill 初始化 run context -> 并发启动 web/map 两个 agent -> 读取 `web-branch-result.json` 与 `map-branch-result.json` -> merge skill 写出正式 `evidence_path`”。
+- v2 目录内新增 `scripts/run_parallel_claude_agents.py`，参考 `Develop/row-batch/scripts/run_claude.py` 的实现方式，由主 skill 通过 `claude -p` 并发拉起 `web` 与 `map` 两个 worker。
+- 保留 2 个 project agent 定义，主要用于固化 worker 角色说明；运行时主线改为 `claude -p` worker 模式，而不是依赖内建 subagent 编排。
+- 推荐执行流为“主 skill 初始化 run context -> 调用 `run_parallel_claude_agents.py` 并发启动 web/map 两个 worker -> 读取 `web-branch-result.json` 与 `map-branch-result.json` -> merge skill 写出正式 `evidence_path`”。
 - 该目录下 skill 默认通过 `Product/evidence_collection_v2/.claude/` 发现，适合在该目录内运行，或通过 `--add-dir Product/evidence_collection_v2` 加入发现范围。

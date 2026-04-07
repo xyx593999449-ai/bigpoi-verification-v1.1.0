@@ -92,3 +92,4 @@ flowchart TD
 - 图商链路不在本轮替换范围内，保持独立分支。
 - 本轮需求与建议改造方案已落盘到 [docs/Product_webreader_replacement_plan_20260407.md](/Users/liubai/Documents/project/ft_project/datamalo/big_poi/docs/Product_webreader_replacement_plan_20260407.md)。
 - Product 同步新增 `evidence_collection_v2/`，用 Claude Code skill 结构把证据收集拆为主编排、web 分支、map 分支与 merge 四个 skill，并通过两个 project subagent 支撑并发执行。
+- `evidence_collection_v2/` 当前已补 `scripts/run_parallel_claude_agents.py`，主编排会参考 `Develop/row-batch/scripts/run_claude.py` 的方式，通过两个 `claude -p` worker 并发执行 web 与 map 分支。
