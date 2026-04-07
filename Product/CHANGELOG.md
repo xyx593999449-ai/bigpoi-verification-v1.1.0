@@ -1,5 +1,21 @@
 # Product CHANGELOG
 
+## [1.10.9] - 2026-04-07
+### Added
+- 新增 `Product/evidence_collection_v2/`，作为证据收集 skill 拆分试运行目录。
+- 新增 v2 skills：
+  - `product-evidence-intel-v2`
+  - `product-evidence-web-v2`
+  - `product-evidence-map-v2`
+  - `product-evidence-merge-v2`
+- 新增 v2 project subagents：
+  - `product-web-researcher-v2`
+  - `product-map-researcher-v2`
+- 新增 `Product/evidence_collection_v2/README.md`，说明 v2 目录目标、运行方式、输出契约与推荐执行流。
+
+### Docs
+- `Product/README.md` 增补 `evidence_collection_v2` 入口、目录说明与 v2 skill 拆分章节，明确当前采用“主编排 + 双分支 agent + merge skill” 的运行结构。
+
 ## [1.10.8] - 2026-04-07
 ### Added
 - 新增 `webreader` 主线脚本：

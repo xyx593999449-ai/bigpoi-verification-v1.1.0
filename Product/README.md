@@ -10,6 +10,7 @@
 |---|---|
 | `skills-bigpoi-verification/` | 主整合技能，负责运行上下文初始化、结果打包、结果校验 |
 | `evidence-collection/` | 证据采集、地图结果评审、采集结果合并、evidence 输出 |
+| `evidence_collection_v2/` | v2 skill 编排层，负责“主编排 + web/map 双分支 agent + merge skill” 结构试运行 |
 | `verification/` | 基于输入与 evidence 生成 decision |
 | `write-pg-verified/` | 把正式结果包回写到 PostgreSQL |
 
@@ -20,6 +21,8 @@
 | `skills-bigpoi-verification/config/poi_type_mapping.yaml` | POI 类型映射 |
 | `skills-bigpoi-verification/schema/` | input / evidence / decision / record schema |
 | `evidence-collection/config/` | 通用采集配置与按类型拆分的证据源配置 |
+| `evidence_collection_v2/.claude/skills/` | v2 证据收集 skill 目录，包含 orchestrator / web / map / merge 四个 skill |
+| `evidence_collection_v2/.claude/agents/` | v2 证据收集 project subagent 目录，包含 web 与 map 两个并发 agent |
 | `verification/config/` | 核验阈值、降级策略、类型映射 |
 | `write-pg-verified/config/db_config.yaml` | 正式回库数据库配置 |
 
@@ -127,3 +130,17 @@
   - `merge_evidence_collection_outputs.py` 中的 `-WebReaderPath`（兼容 `-WebFetchPath`）
   - `orchestrate_collection.py` 中 `-WebReaderPath` / `-WebReaderReviewSeedPath`
 - 本轮需求说明与改造建议详见 [docs/Product_webreader_replacement_plan_20260407.md](/Users/liubai/Documents/project/ft_project/datamalo/big_poi/docs/Product_webreader_replacement_plan_20260407.md)。
+
+## 12. `evidence_collection_v2` skill 拆分（2026-04-07）
+
+- `Product/evidence_collection_v2/` 新增一套面向 Claude Code skill 运行时的 v2 结构，不替换现有正式 Python 脚本，只拆分 skill 编排职责。
+- v2 当前拆为 4 个 skill：
+  - `product-evidence-intel-v2`
+  - `product-evidence-web-v2`
+  - `product-evidence-map-v2`
+  - `product-evidence-merge-v2`
+- v2 同时新增 2 个 project subagent：
+  - `product-web-researcher-v2`
+  - `product-map-researcher-v2`
+- 推荐执行流为“主 skill 初始化 run context -> 并发启动 web/map 两个 agent -> 读取 `web-branch-result.json` 与 `map-branch-result.json` -> merge skill 写出正式 `evidence_path`”。
+- 该目录下 skill 默认通过 `Product/evidence_collection_v2/.claude/` 发现，适合在该目录内运行，或通过 `--add-dir Product/evidence_collection_v2` 加入发现范围。
