@@ -1,7 +1,6 @@
 ---
 name: evidence-collection
 description: BigPOI 证据收集主调度 skill。用于初始化运行上下文，并发调用 evidence-collection-web 与 evidence-collection-map，等待分支结果后再调用 evidence-collection-merge 写出正式 evidence 文件。
-disable-model-invocation: true
 allowed-tools: Bash Read Write Edit Glob Grep LS
 ---
 

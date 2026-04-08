@@ -1,7 +1,6 @@
 ---
 name: evidence-collection-map
 description: BigPOI 证据收集图商分支 skill。用于内部图商代理、缺失图商补采、map review 校验与 reviewed 结果落盘。
-disable-model-invocation: true
 allowed-tools: Bash Read Write Edit Glob Grep LS
 ---
 

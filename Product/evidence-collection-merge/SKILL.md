@@ -1,7 +1,6 @@
 ---
 name: evidence-collection-merge
 description: BigPOI 证据收集合并 skill。用于读取 web 和 map 分支结果，执行 reviewed-only merge，并写出正式 evidence 文件。
-disable-model-invocation: true
 allowed-tools: Bash Read Write Edit Glob Grep LS
 ---
 

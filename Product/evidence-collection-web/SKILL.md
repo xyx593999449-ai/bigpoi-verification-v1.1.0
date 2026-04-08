@@ -1,7 +1,6 @@
 ---
 name: evidence-collection-web
 description: BigPOI 证据收集 web 分支 skill。用于网页搜索、网页读取、review seed 校验与 reviewed 结果落盘；优先使用内置 WebSearch 与 WebFetch，不可用时回退 Python 代理脚本。
-disable-model-invocation: true
 allowed-tools: Bash Read Write Edit Glob Grep LS WebSearch WebFetch
 ---
 
