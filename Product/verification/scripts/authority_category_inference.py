@@ -54,9 +54,12 @@ GOV_LEVEL_PATTERNS = {
     ),
     "130103": (re.compile(r"市人民政府"), re.compile(r"地市级")),
     "130104": (re.compile(r"(区|县)人民政府"), re.compile(r"区县级")),
-    "130105": (re.compile(r"(乡|镇)人民政府"), re.compile(r"乡镇级")),
-    "130106": (
+    "130105": (
+        re.compile(r"(乡|镇)人民政府"),
         re.compile(r"街道办事处"),
+        re.compile(r"乡镇级"),
+    ),
+    "130106": (
         re.compile(r"社区居民委员会"),
         re.compile(r"居民委员会"),
         re.compile(r"村民委员会"),

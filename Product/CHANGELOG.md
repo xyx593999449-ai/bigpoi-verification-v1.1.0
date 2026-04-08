@@ -1,5 +1,11 @@
 # Product CHANGELOG
 
+## [2.0.2] - 2026-04-08
+### Changed
+- 修正 authority 分类行政层级口径：`街道办事处` 从 `130106` 调整为 `130105`（乡镇/街道同级），`130106` 保留为社区/行政村等乡镇以下级。
+- 同步更新 `evidence_collection_common.py` 的 `level_hint` 归一化规则，避免“街道”被归入“乡镇以下级”。
+- 更新 `poi_type_mapping.yaml` 注释说明，明确 `130105` 与 `130106` 的边界定义。
+
 ## [2.0.1] - 2026-04-07
 ### Added
 - 新增 `evidence-collection/scripts/run_evidence_collection.py`，作为主入口一键编排并行 worker、分支结果读取、merge 与 formal evidence 写出。
