@@ -33,6 +33,7 @@ DIMENSION_LABELS = {
 CHANGE_SIGNAL_PATTERN = re.compile(
     r"(\u5efa\u8bae(?:\u4fee\u6539|\u66f4\u6b63|\u8c03\u6574|\u66f4\u65b0|\u8865\u5145)|\u5e94\u6539\u4e3a|\u4fee\u6b63\u4e3a|\u4fee\u6539\u4e3a|\u9700\u6539\u4e3a|\u5efa\u8bae\u4f7f\u7528)"
 )
+ADDRESS_DETAIL_PATTERN = re.compile(r"(\d+|号|栋|楼|室|层|座|单元|路|街|巷|道|园|大厦|广场)")
 
 
 def ensure_stdout_utf8() -> None:
@@ -87,6 +88,13 @@ def is_iso_time(value: str) -> bool:
         return True
     except ValueError:
         return False
+
+
+def parse_iso_time(value: str) -> Optional[datetime]:
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 def normalize_input(poi: dict) -> dict:
@@ -336,6 +344,110 @@ def values_equal(left, right) -> bool:
     return normalize_scalar_value(left) == normalize_scalar_value(right)
 
 
+def normalize_address_text(value: object) -> Optional[str]:
+    text = normalize_scalar_value(value)
+    if text is None:
+        return None
+    return re.sub(r"[\s,，。；;:：()（）-]", "", str(text))
+
+
+def address_detail_score(value: object) -> int:
+    text = normalize_scalar_value(value)
+    if text is None:
+        return 0
+    score = 1
+    if re.search(r"\d", text):
+        score += 2
+    score += len(ADDRESS_DETAIL_PATTERN.findall(text))
+    return score
+
+
+def select_best_evidence_address(evidence: list[dict]) -> Optional[dict]:
+    best_candidate: Optional[dict] = None
+    best_priority: tuple[float, float, int, int] = (-1.0, -1.0, -1, -1)
+    for item in evidence:
+        if not isinstance(item, dict):
+            continue
+        data = item.get("data") if isinstance(item.get("data"), dict) else {}
+        address = normalize_scalar_value(data.get("address"))
+        if address is None:
+            continue
+        source = item.get("source") if isinstance(item.get("source"), dict) else {}
+        verification = item.get("verification") if isinstance(item.get("verification"), dict) else {}
+        source_type = str(source.get("source_type") or "")
+        source_priority = {
+            "official": 3.0,
+            "map_vendor": 2.0,
+            "internet": 1.0,
+        }.get(source_type, 0.0)
+        weight = float(source.get("weight") or verification.get("confidence") or 0.0)
+        detail = address_detail_score(address)
+        confidence = int(round(float(verification.get("confidence") or 0.0) * 1000))
+        priority = (source_priority, weight, detail, confidence)
+        if priority > best_priority:
+            best_priority = priority
+            best_candidate = {
+                "address": str(address),
+                "source_type": source_type,
+                "evidence_id": str(item.get("evidence_id") or ""),
+                "detail_score": detail,
+                "weight": weight,
+            }
+    return best_candidate
+
+
+def apply_address_consistency_guard(
+    poi: dict,
+    evidence: list[dict],
+    dimensions: dict,
+    corrections: dict,
+) -> tuple[dict, dict]:
+    address_dimension = dimensions.get("address")
+    if not isinstance(address_dimension, dict):
+        return dimensions, corrections
+    if str(address_dimension.get("result") or "") != "pass":
+        return dimensions, corrections
+    if isinstance(corrections.get("address"), dict):
+        return dimensions, corrections
+
+    input_address = normalize_scalar_value(poi.get("address"))
+    if input_address is None:
+        return dimensions, corrections
+
+    best_candidate = select_best_evidence_address(evidence)
+    if not best_candidate:
+        return dimensions, corrections
+
+    normalized_input = normalize_address_text(input_address)
+    normalized_candidate = normalize_address_text(best_candidate["address"])
+    if not normalized_input or not normalized_candidate or normalized_input == normalized_candidate:
+        return dimensions, corrections
+
+    input_score = address_detail_score(input_address)
+    candidate_score = int(best_candidate.get("detail_score") or 0)
+    if candidate_score <= input_score:
+        return dimensions, corrections
+
+    output_dimensions = dict(dimensions)
+    guarded_dimension = clone_dimension(address_dimension)
+    guarded_dimension["result"] = "uncertain"
+    guarded_dimension["confidence"] = round(min(float(address_dimension.get("confidence", 0.0)), 0.59), 4)
+    details = dict(guarded_dimension.get("details") if isinstance(guarded_dimension.get("details"), dict) else {})
+    details["reason"] = "存在比输入地址更具体的高权重证据地址，但尚未通过 corrections 完成收敛"
+    details["input_address"] = str(input_address)
+    details["best_evidence_address"] = str(best_candidate["address"])
+    details["best_evidence_source_type"] = str(best_candidate.get("source_type") or "")
+    if best_candidate.get("evidence_id"):
+        guarded_dimension["evidence_refs"] = [str(best_candidate["evidence_id"])]
+    guarded_dimension["details"] = prune_empty(details)
+    output_dimensions["address"] = guarded_dimension
+    output_dimensions["location"] = aggregate_location_dimension(
+        guarded_dimension,
+        output_dimensions.get("coordinates", {}),
+    )
+    return output_dimensions, corrections
+
+
 def collect_change_signal_texts(seed: dict) -> list[str]:
     texts: list[str] = []
     overall = seed.get("overall")
@@ -529,12 +641,17 @@ def main() -> int:
     if errors:
         raise ValueError("\n".join(errors))
 
+    seed_created_at = str((seed_context or {}).get("created_at") or "").strip()
+    seed_created_dt = parse_iso_time(seed_created_at) if seed_created_at else None
     timestamp = datetime.now(timezone.utc)
+    if seed_created_dt and timestamp < seed_created_dt:
+        timestamp = seed_created_dt
     stamp = timestamp.strftime("%Y%m%dT%H%M%SZ")
     created_at = timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     overall_seed = seed.get("overall") if isinstance(seed.get("overall"), dict) else {}
     dimensions, normalized_corrections = apply_authority_category_enhancement(poi, evidence, dimensions, normalized_corrections, seed=seed)
+    dimensions, normalized_corrections = apply_address_consistency_guard(poi, evidence, dimensions, normalized_corrections)
     overall_confidence = float(overall_seed.get("confidence", measure_overall_confidence(dimensions)))
 
     status = str(overall_seed.get("status", infer_status(dimensions, overall_confidence)))
@@ -558,6 +675,10 @@ def main() -> int:
         if source_type in distribution:
             distribution[source_type] += 1
 
+    processing_duration_ms = int(seed.get("processing_duration_ms", 0) or 0)
+    if processing_duration_ms <= 0 and seed_created_dt is not None:
+        processing_duration_ms = max(int((timestamp - seed_created_dt).total_seconds() * 1000), 1)
+
     decision = {
         "decision_id": f"DEC_{stamp}_{short_hash}",
         "poi_id": poi_id,
@@ -577,9 +698,9 @@ def main() -> int:
         },
         "created_at": created_at,
         "processed_at": processed_at or created_at,
-        "processing_duration_ms": int(seed.get("processing_duration_ms", 0)),
+        "processing_duration_ms": processing_duration_ms,
         "version": str(seed.get("version") or "1.6.8"),
-        "metadata": prune_empty({"task_id": resolved_task_id, "seed_created_at": (seed_context or {}).get("created_at")}),
+        "metadata": prune_empty({"task_id": resolved_task_id, "seed_created_at": seed_created_at}),
     }
     if "downgrade_info" in seed:
         decision["downgrade_info"] = seed["downgrade_info"]

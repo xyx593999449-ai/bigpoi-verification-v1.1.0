@@ -99,6 +99,12 @@ def build_search_queries_for_source(
     return query_items
 
 
+def source_allows_direct_read(source: Dict[str, Any], host_info: Dict[str, Any]) -> bool:
+    if not host_info.get("can_fetch_direct"):
+        return False
+    return bool(source.get("allow_direct_read"))
+
+
 def new_web_plan_item(poi: dict, source: dict, config_category: str) -> dict:
     host_info = get_url_host_info(str(source.get("url", "")))
     query = build_query_text(poi=poi, source=source, config_category=config_category)
@@ -110,7 +116,7 @@ def new_web_plan_item(poi: dict, source: dict, config_category: str) -> dict:
         "target_city": str(poi["city"]),
         "target_poi_type": str(poi["poi_type"]),
         "weight": float(source.get("weight", get_source_type_weight(str(source.get("type", ""))))),
-        "mode": "direct_read" if host_info["can_fetch_direct"] else "search_discovery",
+        "mode": "direct_read" if source_allows_direct_read(source, host_info) else "search_discovery",
         "domain": host_info["host"] if host_info["can_filter_domain"] else None,
         "query": query,
     }
@@ -184,7 +190,7 @@ def main() -> int:
         elif source["type"] == "internet":
             internet_sources.append(item)
         host_info = get_url_host_info(str(source.get("url", "")))
-        if host_info["can_fetch_direct"]:
+        if source_allows_direct_read(source, host_info):
             direct_item = {
                 "source_name": str(source.get("name", "")),
                 "source_type": str(source.get("type", "")),

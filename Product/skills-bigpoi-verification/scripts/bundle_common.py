@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Union
 ALLOWED_DECISION_STATUS = {"accepted", "downgraded", "manual_review", "rejected"}
 ALLOWED_RECORD_STATUS = {"verified", "modified", "rejected", "manual_review_pending"}
 CORRECTION_FIELDS = ("name", "address", "coordinates", "category", "city", "city_adcode")
+ADDRESS_DETAIL_PATTERN = re.compile(r"(\d+|号|栋|楼|室|层|座|单元|路|街|巷|道|园|大厦|广场)")
 
 
 def ensure_stdout_utf8() -> None:
@@ -156,6 +157,45 @@ def normalize_coordinate_value(value: Any) -> Optional[Dict[str, Any]]:
     return normalized or None
 
 
+def address_detail_score(value: Any) -> int:
+    text = normalize_scalar_value(value)
+    if text is None:
+        return 0
+    score = 1
+    if re.search(r"\d", text):
+        score += 2
+    score += len(ADDRESS_DETAIL_PATTERN.findall(str(text)))
+    return score
+
+
+def get_preferred_evidence_address(evidence: List[Dict[str, Any]]) -> Optional[str]:
+    best_address: Optional[str] = None
+    best_priority: tuple[float, float, int, int] = (-1.0, -1.0, -1, -1)
+    for item in evidence:
+        if not isinstance(item, dict):
+            continue
+        data = item.get("data") if isinstance(item.get("data"), dict) else {}
+        address = normalize_scalar_value(data.get("address"))
+        if address is None:
+            continue
+        source = item.get("source") if isinstance(item.get("source"), dict) else {}
+        verification = item.get("verification") if isinstance(item.get("verification"), dict) else {}
+        source_type = str(source.get("source_type") or "")
+        source_priority = {
+            "official": 3.0,
+            "map_vendor": 2.0,
+            "internet": 1.0,
+        }.get(source_type, 0.0)
+        weight = float(source.get("weight") or verification.get("confidence") or 0.0)
+        detail = address_detail_score(address)
+        confidence = int(round(float(verification.get("confidence") or 0.0) * 1000))
+        priority = (source_priority, weight, detail, confidence)
+        if priority > best_priority:
+            best_priority = priority
+            best_address = str(address)
+    return best_address
+
+
 def values_equal(left: Any, right: Any) -> bool:
     if isinstance(left, dict) or isinstance(right, dict):
         return json.dumps(left or {}, ensure_ascii=False, sort_keys=True) == json.dumps(right or {}, ensure_ascii=False, sort_keys=True)
@@ -190,6 +230,11 @@ def build_record(input_data: dict[str, Any], evidence: list[dict[str, Any]], dec
     best_coordinates = normalize_coordinate_value(best_data.get("coordinates"))
     corrected_coordinates = normalize_coordinate_value(correction_value(corrections, "coordinates"))
     final_coordinates = get_first_non_empty([corrected_coordinates, input_coordinates, best_coordinates]) or {}
+    preferred_evidence_address = get_preferred_evidence_address(evidence)
+    address_result = str(dimensions.get("address", {}).get("result") or "")
+    use_evidence_address = bool(preferred_evidence_address) and (
+        normalize_scalar_value(input_data.get("address")) is None or address_result == "pass"
+    )
 
     final_name = str(get_first_non_empty([
         normalize_scalar_value(correction_value(corrections, "name")),
@@ -198,8 +243,9 @@ def build_record(input_data: dict[str, Any], evidence: list[dict[str, Any]], dec
     ]) or "")
     final_address = str(get_first_non_empty([
         normalize_scalar_value(correction_value(corrections, "address")),
+        normalize_scalar_value(preferred_evidence_address) if use_evidence_address else None,
         normalize_scalar_value(input_data.get("address")),
-        normalize_scalar_value(best_data.get("address")),
+        normalize_scalar_value(best_data.get("address")) if not use_evidence_address else None,
     ]) or "")
     final_category = str(get_first_non_empty([
         normalize_scalar_value(correction_value(corrections, "category")),

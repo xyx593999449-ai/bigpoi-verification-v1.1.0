@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import urllib.parse
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -16,7 +15,15 @@ if str(SHARED_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SHARED_SCRIPT_DIR))
 
 from run_context import attach_context, get_context
-from evidence_collection_common import ensure_stdout_utf8, get_generic_items, normalize_whitespace, read_json_file, utc_iso_now, write_json_file
+from evidence_collection_common import (
+    ensure_stdout_utf8,
+    get_generic_items,
+    normalize_url_for_matching,
+    normalize_whitespace,
+    read_json_file,
+    utc_iso_now,
+    write_json_file,
+)
 
 
 def log_progress(message: str) -> None:
@@ -73,37 +80,11 @@ def _normalize_search_read_targets(websearch_reviewed: Dict[str, Any]) -> List[D
 
 
 def _dedupe_targets(targets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    def _canonical_url(url: Optional[str]) -> Optional[str]:
-        normalized = normalize_whitespace(url)
-        if not normalized:
-            return None
-        parsed = urllib.parse.urlparse(normalized)
-        if not parsed.scheme or not parsed.netloc:
-            return normalized
-        query_pairs = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
-        filtered_pairs = []
-        for key, value in query_pairs:
-            token = key.lower()
-            if token.startswith("utm_") or token in {"spm", "from", "fromid", "source", "page", "page_index", "pn", "p", "pageindex"}:
-                continue
-            filtered_pairs.append((key, value))
-        path = parsed.path.rstrip("/") or "/"
-        return urllib.parse.urlunparse(
-            (
-                parsed.scheme.lower(),
-                parsed.netloc.lower(),
-                path,
-                "",
-                urllib.parse.urlencode(filtered_pairs),
-                "",
-            )
-        )
-
     deduped: List[Dict[str, Any]] = []
     seen_urls: set[str] = set()
     for target in targets:
         url = normalize_whitespace(target.get("source_url"))
-        canonical_url = _canonical_url(url)
+        canonical_url = normalize_url_for_matching(url)
         if not canonical_url or canonical_url in seen_urls:
             continue
         seen_urls.add(canonical_url)
@@ -169,6 +150,7 @@ def main() -> int:
         "status": "ok" if read_targets else "empty",
         "generated_at": utc_iso_now(),
         "read_targets": read_targets,
+        "read_target_count": len(read_targets),
         "fallback_policy": "websearch_reviewed_can_continue_when_webreader_missing_or_failed",
     }
     if resolved_run_id and resolved_poi_id:

@@ -15,6 +15,7 @@ import prepare_map_review_input
 import validate_map_review_seed
 import validate_websearch_review_seed
 import write_websearch_review
+import build_web_source_plan
 import build_webreader_plan
 
 FIXTURE_DIR = Path(__file__).resolve().parent
@@ -620,3 +621,63 @@ def test_build_webreader_plan_combines_direct_read_and_followup(tmp_path: Path):
     assert plan["status"] == "ok"
     assert len(plan["read_targets"]) == 2
     assert {item["read_reason"] for item in plan["read_targets"]} == {"direct_read", "search_followup"}
+
+
+def test_build_web_source_plan_keeps_config_sources_in_search_only(tmp_path: Path):
+    poi = {
+        "id": "poi_gov_1",
+        "name": "福保街道办事处",
+        "poi_type": "130105",
+        "city": "深圳市",
+    }
+    poi_path = tmp_path / "poi.json"
+    out_path = tmp_path / "web-plan.json"
+    poi_path.write_text(json.dumps(poi, ensure_ascii=False), encoding="utf-8")
+
+    with patch(
+        "sys.argv",
+        [
+            "build_web_source_plan.py",
+            "-PoiPath",
+            str(poi_path),
+            "-OutputPath",
+            str(out_path),
+        ],
+    ):
+        assert build_web_source_plan.main() == 0
+
+    plan = json.loads(out_path.read_text(encoding="utf-8"))
+    assert plan["status"] == "ok"
+    assert plan["direct_read_sources"] == []
+    assert len(plan["search_queries"]) > 0
+
+
+def test_validate_websearch_review_seed_allows_relevant_non_poi_body():
+    catalog = {
+        "WEB_001": {
+            "source_type": "official",
+            "source_url": "https://www.example.gov.cn/detail",
+            "page_title": "机构职责",
+        }
+    }
+    review_seed = {
+        "items": [
+            {
+                "result_id": "WEB_001",
+                "is_relevant": True,
+                "confidence": 0.72,
+                "reason": "页面提到目标街道办，但主办单位不是目标 POI 本体。",
+                "source_type": "official",
+                "entity_relation": "subordinate_org",
+                "evidence_ready": False,
+                "should_read": False,
+                "extracted": {
+                    "name": "福保街道办事处",
+                },
+            }
+        ]
+    }
+
+    result = validate_websearch_review_seed.validate_websearch_review_seed_against_catalog(catalog, review_seed)
+    assert result["status"] == "ok"
+    assert result["relevant_count"] == 1

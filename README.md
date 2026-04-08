@@ -81,6 +81,9 @@ flowchart TD
 - `evidence-collection/scripts/run_evidence_collection.py` 作为证据收集主脚本，负责并行 worker 调度、分支结果读取与 merge 落盘。
 - `evidence-collection/scripts/run_parallel_claude_agents.py` 参考 `Develop/row-batch/scripts/run_claude.py`，通过两个 `claude -p` worker 并发执行 web 与图商分支。
 - web 分支优先使用模型内置 `WebSearch / WebFetch`；仅在当前运行环境不可用时，才回退到内部代理 Python 脚本。
+- Product web 证据配置已收敛为“配置源默认只负责 search discovery 与来源权重”，门户类 URL 不再自动进入 `webreader` 直读。
+- `web-branch-result.json` 现在会额外暴露 `webreader_execution_state` 与 `attention_required`，用于区分“详情页已读但无有效信息”和“详情页链路没有执行完整”。
+- Product merge 会对同源重复网页证据去重，verification / bundle validator 会额外拦截 accepted 结果里未收敛的粗粒度地址。
 - `claude -p` 调用日志统一落到 `output/results/{task_id}/claude-agent-logs/`，便于和正式结果目录一起排障留档。
 - review seed 默认由并行 worker 写入 `output/runs/{run_id}/process/`，legacy 编排脚本已支持自动发现，无需强制手动传参。
 - 政府机关行政层级口径已统一：`130105` 覆盖乡镇与街道，`130106` 仅覆盖社区/行政村等乡镇以下级。

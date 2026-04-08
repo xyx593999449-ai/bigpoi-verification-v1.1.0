@@ -13,6 +13,18 @@ from typing import Any, Dict, Iterable, List, Optional, Union
 ALLOWED_SOURCE_TYPES = {"official", "map_vendor", "internet", "user_contributed", "other"}
 UTC_ISO_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 UTC_STAMP_FORMAT = "%Y%m%dT%H%M%SZ"
+TRACKING_QUERY_KEYS = {
+    "spm",
+    "from",
+    "fromid",
+    "source",
+    "page",
+    "page_index",
+    "pageindex",
+    "pn",
+    "p",
+}
+HOMEPAGE_FILE_NAMES = {"index", "home", "homepage", "default", "main"}
 
 
 def ensure_stdout_utf8() -> None:
@@ -605,6 +617,59 @@ def get_url_host_info(url: Optional[str]) -> Dict[str, Any]:
         result["can_fetch_direct"] = not has_template
         result["can_filter_domain"] = not bool(re.search(r"\{.+?\}", host))
     return result
+
+
+def normalize_url_for_matching(url: Optional[str]) -> Optional[str]:
+    normalized = normalize_whitespace(url)
+    if not normalized:
+        return None
+    parsed = urllib.parse.urlparse(normalized)
+    if not parsed.scheme or not parsed.netloc:
+        return normalized
+
+    query_pairs = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+    filtered_pairs = []
+    for key, value in query_pairs:
+        token = key.lower()
+        if token.startswith("utm_") or token in TRACKING_QUERY_KEYS:
+            continue
+        filtered_pairs.append((key, value))
+
+    path = parsed.path or "/"
+    if path != "/":
+        path = path.rstrip("/") or "/"
+    return urllib.parse.urlunparse(
+        (
+            parsed.scheme.lower(),
+            parsed.netloc.lower(),
+            path,
+            "",
+            urllib.parse.urlencode(filtered_pairs),
+            "",
+        )
+    )
+
+
+def url_looks_like_homepage(url: Optional[str]) -> bool:
+    normalized = normalize_url_for_matching(url)
+    if not normalized:
+        return False
+    parsed = urllib.parse.urlparse(normalized)
+    path = parsed.path or "/"
+    if path in {"", "/"}:
+        return True
+
+    trimmed_path = path.rstrip("/")
+    if not trimmed_path:
+        return True
+
+    last_segment = trimmed_path.rsplit("/", 1)[-1].lower()
+    stem, dot, suffix = last_segment.partition(".")
+    if stem in HOMEPAGE_FILE_NAMES:
+        return True
+    if suffix in {"html", "htm", "shtml", "php", "asp", "aspx"} and stem in HOMEPAGE_FILE_NAMES:
+        return True
+    return False
 
 
 def extract_source_domain(url: Optional[str]) -> Optional[str]:

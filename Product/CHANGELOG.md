@@ -1,9 +1,28 @@
 # Product CHANGELOG
 
+## [2.0.4] - 2026-04-08
+### Changed
+- `build_web_source_plan.py` 调整为“配置源默认只做 search discovery”，不再把政府门户、百科等类型配置 URL 自动塞进 `direct_read_sources`；`direct_read` 仅对显式允许的直读来源生效。
+- `build_webreader_plan.py` 显式输出 `read_target_count`，并继续优先消费 `websearch-reviewed.json` 中被保留的详情页 `read_url`。
+- `validate_websearch_review_seed.py` 放宽 `is_relevant=true` 的约束：不再强制 `entity_relation=poi_body`，避免为通过校验而篡改事实关系；仅 `poi_body` 才允许 `evidence_ready=true` 进入 merge。
+- `write_web_branch_result.py` 新增 `webreader_plan/raw` 感知与 `webreader_execution_state`、`attention_required` 字段，可区分“正常 empty”与“详情页未执行完整”；当 `websearch` 已有可归并结果时，不会因为 reader 缺失而误判整条分支失败。
+- `merge_evidence_collection_outputs.py` 在 web 证据层增加同源重复页去重，避免同一官方页面不同 URL 重复抬高置信度。
+- `write_decision_output.py` 增加地址收敛守卫与运行时序兜底：当证据地址明显比输入地址更具体但未收敛时，地址维度会降为 `uncertain`；同时自动补齐正数 `processing_duration_ms` 并修正 `created_at/seed_created_at` 时序。
+- `bundle_common.py` 与 `validate_result_bundle.py` 补齐地址最终值和结果包语义校验，防止 accepted 结果继续保留粗粒度地址。
+
+### Added
+- 新增回归测试覆盖：
+  - 配置源 search-only 规划
+  - `relevant` 但非 `poi_body` 的 review seed 校验
+  - `webreader` 正常 empty 与缺失执行的分支状态区分
+  - websearch 同页重复 evidence 去重
+  - 地址未收敛时的 decision/validator 守卫
+
 ## [2.0.3] - 2026-04-08
 ### Changed
 - 删除 `evidence-collection/scripts/orchestrate_collection.py` 旧兼容入口，正式收敛到 `run_evidence_collection.py` 唯一主入口，减少模型误判到过时链路。
 - 将对应测试从 `test_evidence_orchestrator.py` 重定向为 `test_run_evidence_collection.py`，改为覆盖当前正式入口的公共行为。
+- 移除 `evidence-collection`、`evidence-collection-web`、`evidence-collection-map`、`evidence-collection-merge` 的 `disable-model-invocation: true` 限制，允许父技能按设计直接编排调用。
 
 ## [2.0.2] - 2026-04-08
 ### Changed

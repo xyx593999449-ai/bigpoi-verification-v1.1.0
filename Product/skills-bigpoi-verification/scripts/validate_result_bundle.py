@@ -5,6 +5,7 @@ import argparse
 import json
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -27,6 +28,7 @@ from runtime_paths import build_task_dir, detect_workspace_root
 
 
 CJK_PATTERN = re.compile(r"[\u4e00-\u9fff]")
+ADDRESS_DETAIL_PATTERN = re.compile(r"(\d+|号|栋|楼|室|层|座|单元|路|街|巷|道|园|大厦|广场)")
 
 
 def add_error(errors: list[str], message: str) -> None:
@@ -35,6 +37,13 @@ def add_error(errors: list[str], message: str) -> None:
 
 def add_warning(warnings: list[str], message: str) -> None:
     warnings.append(message)
+
+
+def parse_iso_time(value: str) -> Optional[datetime]:
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 def normalize_scalar_value(value: Any) -> Any:
@@ -69,6 +78,47 @@ def format_change_value(value: Any) -> str:
     if value is None:
         return ""
     return str(value)
+
+
+def address_detail_score(value: Any) -> int:
+    text = normalize_scalar_value(value)
+    if text is None:
+        return 0
+    score = 1
+    if re.search(r"\d", str(text)):
+        score += 2
+    score += len(ADDRESS_DETAIL_PATTERN.findall(str(text)))
+    return score
+
+
+def get_preferred_evidence_address(evidence: Any) -> Optional[str]:
+    if not isinstance(evidence, list):
+        return None
+    best_address: Optional[str] = None
+    best_priority: tuple[float, float, int, int] = (-1.0, -1.0, -1, -1)
+    for item in evidence:
+        if not isinstance(item, dict):
+            continue
+        data = item.get("data") if isinstance(item.get("data"), dict) else {}
+        address = normalize_scalar_value(data.get("address"))
+        if address is None:
+            continue
+        source = item.get("source") if isinstance(item.get("source"), dict) else {}
+        verification = item.get("verification") if isinstance(item.get("verification"), dict) else {}
+        source_type = str(source.get("source_type") or "")
+        source_priority = {
+            "official": 3.0,
+            "map_vendor": 2.0,
+            "internet": 1.0,
+        }.get(source_type, 0.0)
+        weight = float(source.get("weight") or verification.get("confidence") or 0.0)
+        detail = address_detail_score(address)
+        confidence = int(round(float(verification.get("confidence") or 0.0) * 1000))
+        priority = (source_priority, weight, detail, confidence)
+        if priority > best_priority:
+            best_priority = priority
+            best_address = str(address)
+    return best_address
 
 
 def validate_corrections_structure(corrections: Any, errors: list[str]) -> dict[str, dict[str, Any]]:
@@ -131,11 +181,26 @@ def validate_decision(decision: dict, poi_id: str, expected_run_id: str, errors:
         add_error(errors, "decision.poi_id must match record.poi_id")
     if "created_at" in decision and not is_iso_time(str(decision["created_at"])):
         add_error(errors, "decision.created_at must be ISO datetime")
+    processing_duration_ms = decision.get("processing_duration_ms")
+    if processing_duration_ms is None:
+        add_error(errors, "decision.processing_duration_ms is required")
+    elif int(processing_duration_ms) <= 0:
+        add_error(errors, "decision.processing_duration_ms must be greater than 0")
     run_id = str(decision.get("run_id") or "").strip()
     if not run_id:
         add_error(errors, "decision.run_id is required")
     elif expected_run_id and run_id != expected_run_id:
         add_error(errors, "decision.run_id must match bundle run_id")
+    metadata = decision.get("metadata") if isinstance(decision.get("metadata"), dict) else {}
+    seed_created_at = str(metadata.get("seed_created_at") or "").strip()
+    if seed_created_at:
+        if not is_iso_time(seed_created_at):
+            add_error(errors, "decision.metadata.seed_created_at must be ISO datetime")
+        else:
+            decision_created_at = parse_iso_time(str(decision.get("created_at") or ""))
+            seed_created_dt = parse_iso_time(seed_created_at)
+            if decision_created_at and seed_created_dt and seed_created_dt > decision_created_at:
+                add_error(errors, "decision.metadata.seed_created_at must not be later than decision.created_at")
     overall = decision.get("overall")
     if overall is not None:
         if not isinstance(overall, dict):
@@ -282,6 +347,31 @@ def validate_record_alignment(record: dict, corrections: dict[str, dict[str, Any
             add_error(errors, f"record.verification_result.changes[{field}].reason must match decision correction reason")
 
 
+def validate_address_semantics(record: dict, decision: dict, evidence: Any, errors: list[str]) -> None:
+    overall = decision.get("overall") if isinstance(decision.get("overall"), dict) else {}
+    dimensions = decision.get("dimensions") if isinstance(decision.get("dimensions"), dict) else {}
+    verification_result = record.get("verification_result") if isinstance(record.get("verification_result"), dict) else {}
+    final_values = verification_result.get("final_values") if isinstance(verification_result.get("final_values"), dict) else {}
+
+    if str(overall.get("status") or "") != "accepted":
+        return
+    address_dimension = dimensions.get("address") if isinstance(dimensions.get("address"), dict) else {}
+    if str(address_dimension.get("result") or "") != "pass":
+        return
+
+    record_address = normalize_scalar_value(final_values.get("address"))
+    evidence_address = normalize_scalar_value(get_preferred_evidence_address(evidence))
+    if record_address is None or evidence_address is None:
+        return
+    if values_equal(record_address, evidence_address):
+        return
+
+    record_score = address_detail_score(record_address)
+    evidence_score = address_detail_score(evidence_address)
+    if evidence_score > record_score:
+        add_error(errors, "record.verification_result.final_values.address must not ignore a more specific accepted evidence address")
+
+
 def validate_index(index: dict, task_dir: Path, workspace_root: Path, poi_id: str, task_id: str, expected_run_id: str, errors: list[str]) -> None:
     for field in ("poi_id", "task_id", "created_at", "task_dir", "files", "description"):
         if field not in index:
@@ -394,6 +484,7 @@ def main() -> int:
     else:
         errors.append("decision file is missing")
 
+    evidence = None
     if evidence_path and evidence_path.is_file():
         evidence = read_json_file(evidence_path)
         validate_evidence(evidence, poi_id, bundle_run_id, errors)
@@ -402,6 +493,7 @@ def main() -> int:
 
     if isinstance(decision, dict):
         validate_record_alignment(record, decision_corrections, errors)
+        validate_address_semantics(record, decision, evidence, errors)
     validate_index(index, resolved_task_dir, workspace_root, poi_id, task_id, bundle_run_id, errors)
 
     failed_stage = "complete"

@@ -114,3 +114,107 @@ def test_merge_rejects_raw_websearch_payload(tmp_path: Path):
     ):
         with pytest.raises(ValueError, match="websearch-reviewed payload"):
             merge_evidence_collection_outputs.main()
+
+
+def test_merge_deduplicates_same_websearch_page(tmp_path: Path):
+    poi = {"id": "poi_2", "name": "福保街道办事处", "poi_type": "130105", "city": "深圳市"}
+    internal_reviewed = {
+        "status": "empty",
+        "reviewed_at": "2026-04-02T00:00:00Z",
+        "vendors": {
+            "amap": {"vendor": "amap", "items": [], "review_summary": {"kept_count": 0, "dropped_count": 0}},
+            "bmap": {"vendor": "bmap", "items": [], "review_summary": {"kept_count": 0, "dropped_count": 0}},
+            "qmap": {"vendor": "qmap", "items": [], "review_summary": {"kept_count": 0, "dropped_count": 0}},
+        },
+        "review_summary": {},
+        "context": {
+            "run_id": "run_dedupe",
+            "poi_id": "poi_2",
+            "task_id": "task_dedupe",
+            "created_at": "2026-04-02T00:00:00Z",
+        },
+    }
+    websearch_reviewed = {
+        "status": "ok",
+        "reviewed_at": "2026-04-02T00:01:00Z",
+        "items": [
+            {
+                "source": {
+                    "source_id": "WEB_001",
+                    "source_name": "福田政府在线",
+                    "source_type": "official",
+                    "source_url": "https://www.szft.gov.cn/a/detail.html",
+                    "weight": 1.0,
+                },
+                "data": {
+                    "name": "福保街道办事处",
+                    "phone": "0755-83839006",
+                },
+                "verification": {"is_valid": True, "confidence": 0.88},
+                "metadata": {
+                    "signal_origin": "websearch",
+                    "source_domain": "www.szft.gov.cn",
+                    "page_title": "福保街道办联系方式",
+                    "canonical_url": "https://www.szft.gov.cn/a/detail.html",
+                },
+            },
+            {
+                "source": {
+                    "source_id": "WEB_002",
+                    "source_name": "福田政府在线",
+                    "source_type": "official",
+                    "source_url": "https://www.szft.gov.cn/b/detail.html",
+                    "weight": 1.0,
+                },
+                "data": {
+                    "name": "福保街道办事处",
+                    "phone": "0755-83839006",
+                },
+                "verification": {"is_valid": True, "confidence": 0.9},
+                "metadata": {
+                    "signal_origin": "websearch",
+                    "source_domain": "www.szft.gov.cn",
+                    "page_title": "福保街道办联系方式",
+                },
+            },
+        ],
+        "review_summary": {"kept_count": 2, "dropped_count": 0},
+        "context": {
+            "run_id": "run_dedupe",
+            "poi_id": "poi_2",
+            "task_id": "task_dedupe",
+            "created_at": "2026-04-02T00:00:00Z",
+        },
+    }
+
+    poi_path = tmp_path / "poi.json"
+    internal_path = tmp_path / "map-reviewed.json"
+    websearch_path = tmp_path / "websearch-reviewed.json"
+    output_path = tmp_path / "collector-merged.json"
+    poi_path.write_text(json.dumps(poi, ensure_ascii=False), encoding="utf-8")
+    internal_path.write_text(json.dumps(internal_reviewed, ensure_ascii=False), encoding="utf-8")
+    websearch_path.write_text(json.dumps(websearch_reviewed, ensure_ascii=False), encoding="utf-8")
+
+    with patch(
+        "sys.argv",
+        [
+            "merge_evidence_collection_outputs.py",
+            "-PoiPath",
+            str(poi_path),
+            "-InternalProxyPath",
+            str(internal_path),
+            "-WebSearchPath",
+            str(websearch_path),
+            "-OutputPath",
+            str(output_path),
+            "-RunId",
+            "run_dedupe",
+            "-TaskId",
+            "task_dedupe",
+        ],
+    ):
+        assert merge_evidence_collection_outputs.main() == 0
+
+    merged = json.loads(output_path.read_text(encoding="utf-8"))
+    assert len(merged["evidence_list"]) == 1
+    assert merged["summary"]["dedupe_summary"]["duplicate_count"] == 1

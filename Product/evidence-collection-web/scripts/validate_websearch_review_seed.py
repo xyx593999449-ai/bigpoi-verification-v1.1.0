@@ -129,12 +129,13 @@ def validate_websearch_review_seed_against_catalog(
             errors.append(f"items[{index}].extracted must be an object")
             extracted = {}
         if item.get("is_relevant") is True:
-            if evidence_ready is not True:
-                errors.append(f"items[{index}].evidence_ready must be true when is_relevant=true")
             if not normalize_whitespace(extracted.get("name")):
                 errors.append(f"items[{index}].extracted.name is required when is_relevant=true")
-            if entity_relation and entity_relation != "poi_body":
-                errors.append(f"items[{index}].entity_relation must be poi_body when is_relevant=true")
+            if entity_relation == "poi_body":
+                if evidence_ready is not True:
+                    errors.append(f"items[{index}].evidence_ready must be true when entity_relation=poi_body")
+            elif evidence_ready is True:
+                errors.append(f"items[{index}].evidence_ready can only be true when entity_relation=poi_body")
         elif evidence_ready is True:
             errors.append(f"items[{index}].evidence_ready cannot be true when is_relevant=false")
 

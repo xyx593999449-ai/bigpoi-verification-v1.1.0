@@ -13,12 +13,14 @@ if str(SCRIPT_DIR) not in sys.path:
 from run_context import attach_context, collect_item_run_ids, get_context, require_context, set_item_run_context
 from evidence_collection_common import (
     ensure_stdout_utf8,
+    extract_source_domain,
     finalize_evidence_seed,
     get_generic_items,
     get_source_type_rank,
     iter_unique,
     new_generic_evidence_seed,
     new_map_vendor_evidence_seed,
+    normalize_url_for_matching,
     normalize_input_poi,
     normalize_whitespace,
     read_json_file,
@@ -94,6 +96,87 @@ def patch_merge_context(
             created_at=reviewed_or_generated_at,
         )
     return payload
+
+
+def seed_priority(seed: dict) -> tuple[float, float, float, int]:
+    source = seed.get("source") if isinstance(seed.get("source"), dict) else {}
+    verification = seed.get("verification") if isinstance(seed.get("verification"), dict) else {}
+    metadata = seed.get("metadata") if isinstance(seed.get("metadata"), dict) else {}
+    data = seed.get("data") if isinstance(seed.get("data"), dict) else {}
+    populated_fields = sum(1 for field in ("name", "address", "phone", "category", "coordinates") if data.get(field))
+    source_rank_score = float(10 - get_source_type_rank(str(source.get("source_type") or "")))
+    weight = float(source.get("weight") or 0.0)
+    confidence = float(verification.get("confidence") or 0.0)
+    branch_bonus = 1 if str(metadata.get("signal_origin") or "").strip().lower() == "webreader" else 0
+    return (source_rank_score + branch_bonus, weight, confidence, populated_fields)
+
+
+def build_seed_identity_keys(seed: dict) -> list[str]:
+    source = seed.get("source") if isinstance(seed.get("source"), dict) else {}
+    metadata = seed.get("metadata") if isinstance(seed.get("metadata"), dict) else {}
+    data = seed.get("data") if isinstance(seed.get("data"), dict) else {}
+    signal_origin = str(metadata.get("signal_origin") or "").strip().lower()
+    if signal_origin not in {"websearch", "webreader", "webfetch"}:
+        return []
+
+    source_type = str(source.get("source_type") or "").strip().lower()
+    domain = normalize_whitespace(metadata.get("source_domain")) or extract_source_domain(source.get("source_url"))
+    page_title = normalize_whitespace(metadata.get("page_title"))
+    name = normalize_whitespace(data.get("name"))
+    address = normalize_whitespace(data.get("address"))
+    phone = normalize_whitespace(data.get("phone"))
+    category = normalize_whitespace(data.get("category"))
+    url = normalize_url_for_matching(metadata.get("canonical_url") or source.get("source_url"))
+
+    keys: list[str] = []
+    if url:
+        keys.append(f"url|{signal_origin}|{source_type}|{url}")
+    if domain and page_title and name:
+        keys.append(
+            "|".join(
+                [
+                    "page",
+                    signal_origin,
+                    source_type,
+                    str(domain).lower(),
+                    str(page_title).lower(),
+                    name,
+                    address or "",
+                    phone or "",
+                    category or "",
+                ]
+            )
+        )
+    return keys
+
+
+def dedupe_evidence_seeds(evidence_seeds: list[dict]) -> tuple[list[dict], dict]:
+    deduped: list[dict] = []
+    key_to_index: dict[str, int] = {}
+    duplicate_count = 0
+
+    for seed in evidence_seeds:
+        keys = build_seed_identity_keys(seed)
+        matched_index = next((key_to_index[key] for key in keys if key in key_to_index), None)
+        if matched_index is None:
+            deduped.append(seed)
+            new_index = len(deduped) - 1
+            for key in keys:
+                key_to_index[key] = new_index
+            continue
+
+        duplicate_count += 1
+        if seed_priority(seed) > seed_priority(deduped[matched_index]):
+            deduped[matched_index] = seed
+        for key in keys:
+            key_to_index[key] = matched_index
+
+    summary = {
+        "input_count": len(evidence_seeds),
+        "kept_count": len(deduped),
+        "duplicate_count": duplicate_count,
+    }
+    return deduped, summary
 
 
 def main() -> int:
@@ -254,8 +337,9 @@ def main() -> int:
     if errors:
         raise ValueError("\n".join(errors))
 
+    deduped_seeds, dedupe_summary = dedupe_evidence_seeds(evidence_seeds)
     sorted_seeds = sorted(
-        evidence_seeds,
+        deduped_seeds,
         key=lambda seed: (
             get_source_type_rank(str(seed["source"].get("source_type"))),
             str(seed["source"].get("source_name") or ""),
@@ -283,8 +367,9 @@ def main() -> int:
             "final_missing_vendors": final_missing_vendors,
             "branch_counts": branch_summary,
             "source_type_distribution": source_type_distribution,
+            "dedupe_summary": dedupe_summary,
             "run_id": resolved_run_id,
-        "evidence_count": len(final_evidence),
+            "evidence_count": len(final_evidence),
         },
     }
     if resolved_run_id:
@@ -302,6 +387,7 @@ def main() -> int:
             f"map_vendor={source_type_distribution['map_vendor']}，"
             f"official={source_type_distribution['official']}，"
             f"internet={source_type_distribution['internet']}，"
+            f"去重剔除={dedupe_summary['duplicate_count']}，"
             f"总计={len(final_evidence)}。"
         ),
     }

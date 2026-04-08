@@ -1,9 +1,21 @@
 # Changelog
 
+## [2.0.4] - 2026-04-08
+
+### Changed
+- Product web 证据规划调整为“配置源默认 search-only”，避免把政府门户、百科首页等通用入口直接送进 `webreader`。
+- Product `web-branch-result.json` 新增 `webreader_execution_state` 与 `attention_required`，可区分“正常 empty”与“详情页链路未执行完整”。
+- Product websearch review 校验放宽为“`is_relevant` 不再强制 `entity_relation=poi_body`”，只允许 `poi_body` 进入 merge，避免为过校验而改写事实关系。
+- Product merge 增加同源网页证据去重，verification / bundle validator 增加地址收敛和运行时序守卫，降低“形式通过但语义不稳”的 accepted 结果。
+
+### Added
+- Product 新增一组回归测试，覆盖 search-only web plan、webreader empty 状态语义、网页证据去重、地址未收敛的 decision/validator 守卫。
+
 ## [2.0.3] - 2026-04-08
 
 ### Changed
 - 移除 Product 侧 `orchestrate_collection.py` 旧入口，证据收集正式主线统一到 `run_evidence_collection.py`，降低模型误走兼容链路的概率。
+- 移除 Product 证据收集链路各 skill 的 `disable-model-invocation` 限制，使父技能可以直接调用 web/map/merge 子技能。
 
 ## [2.0.2] - 2026-04-08
 
