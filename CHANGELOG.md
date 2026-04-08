@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.5] - 2026-04-08
+
+### Changed
+- Product 图商内部代理默认超时策略调整为“10 秒首超时 + 60 秒单次重试”；若两轮都超时，`call_internal_proxy.py` 会直接抛异常，避免把代理故障静默降级。
+- Product 图商内部代理配置新增 `internal_proxy.retry_timeout`，并将默认 `internal_proxy.timeout` 下调到 10 秒。
+
+### Added
+- Product 新增图商内部代理超时重试回归测试，覆盖“重试成功”和“两轮超时抛异常”两条路径。
+
 ## [2.0.4] - 2026-04-08
 
 ### Changed

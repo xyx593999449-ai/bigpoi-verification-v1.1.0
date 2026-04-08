@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import socket
 import sys
 import urllib.parse
 import urllib.request
@@ -46,6 +47,43 @@ def fetch_proxy_response(base_url: str, vendor: str, city: str, poi_name: str, t
     with urllib.request.urlopen(uri, timeout=timeout_seconds) as response:
         raw = response.read().decode("utf-8")
     return json.loads(raw)
+
+
+def is_timeout_exception(exc: Exception) -> bool:
+    if isinstance(exc, (TimeoutError, socket.timeout)):
+        return True
+    reason = getattr(exc, "reason", None)
+    if isinstance(reason, (TimeoutError, socket.timeout)):
+        return True
+    text = str(exc).lower()
+    return "timed out" in text or "timeout" in text
+
+
+def fetch_proxy_response_with_retry(
+    base_url: str,
+    vendor: str,
+    city: str,
+    poi_name: str,
+    timeout_seconds: int,
+    retry_timeout_seconds: int,
+) -> dict:
+    try:
+        return fetch_proxy_response(base_url, vendor, city, poi_name, timeout_seconds)
+    except Exception as exc:
+        if not is_timeout_exception(exc):
+            raise
+        log_progress(
+            f"图商请求超时，准备重试: vendor={vendor} initial_timeout={timeout_seconds}s retry_timeout={retry_timeout_seconds}s"
+        )
+        try:
+            return fetch_proxy_response(base_url, vendor, city, poi_name, retry_timeout_seconds)
+        except Exception as retry_exc:
+            if is_timeout_exception(retry_exc):
+                raise TimeoutError(
+                    f"internal proxy timed out twice for vendor={vendor}: "
+                    f"initial_timeout={timeout_seconds}s retry_timeout={retry_timeout_seconds}s"
+                ) from retry_exc
+            raise
 
 
 def emit_result(
@@ -99,7 +137,8 @@ def main() -> int:
     base_url = str(proxy_config.get("base_url") or "").strip()
     if not base_url:
         raise ValueError("internal_proxy.base_url is required in common.yaml")
-    timeout_seconds = args.TimeoutSeconds if args.TimeoutSeconds is not None else int(proxy_config.get("timeout") or 30)
+    timeout_seconds = args.TimeoutSeconds if args.TimeoutSeconds is not None else int(proxy_config.get("timeout") or 10)
+    retry_timeout_seconds = int(proxy_config.get("retry_timeout") or 60)
 
     vendor_results: dict[str, dict] = {}
     missing_vendors: list[str] = []
@@ -113,12 +152,21 @@ def main() -> int:
         log_progress(f"请求图商: vendor={vendor} city={args.City} name={args.PoiName}")
 
         try:
-            raw_response = fetch_proxy_response(base_url, vendor, args.City, args.PoiName, timeout_seconds)
+            raw_response = fetch_proxy_response_with_retry(
+                base_url,
+                vendor,
+                args.City,
+                args.PoiName,
+                timeout_seconds,
+                retry_timeout_seconds,
+            )
             items = convert_map_vendor_api_response(vendor, raw_response)
             vendor_status = "ok" if items else "empty"
             if vendor_status == "ok":
                 successful_vendors += 1
         except Exception as exc:
+            if is_timeout_exception(exc):
+                raise
             error_message = str(exc)
 
         if vendor_status != "ok":

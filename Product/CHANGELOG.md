@@ -1,5 +1,16 @@
 # Product CHANGELOG
 
+## [2.0.5] - 2026-04-08
+### Changed
+- `call_internal_proxy.py` 的图商内部代理默认超时策略调整为：首轮 10 秒，若命中超时则仅重试 1 次且第二轮超时为 60 秒。
+- 图商内部代理在第二轮仍超时时会直接抛出异常，不再把连续超时静默写成普通 `missing_vendors`。
+- `evidence-collection/config/common.yaml` 与 `evidence-collection-map/config/common.yaml` 新增 `internal_proxy.retry_timeout: 60`，并将 `internal_proxy.timeout` 默认值改为 10。
+
+### Added
+- 新增回归测试覆盖：
+  - 首轮超时后 60 秒重试成功
+  - 两轮都超时时抛出异常
+
 ## [2.0.4] - 2026-04-08
 ### Changed
 - `build_web_source_plan.py` 调整为“配置源默认只做 search discovery”，不再把政府门户、百科等类型配置 URL 自动塞进 `direct_read_sources`；`direct_read` 仅对显式允许的直读来源生效。

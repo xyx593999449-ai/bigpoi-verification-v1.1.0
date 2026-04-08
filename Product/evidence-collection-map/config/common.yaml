@@ -29,8 +29,10 @@ internal_proxy:
   enabled: true
   # 内部代理基础URL
   base_url: "http://10.82.122.209:9081/botshop/proxy/mapapi"
-  # 请求超时时间（秒）
-  timeout: 30
+  # 首次请求超时时间（秒）
+  timeout: 10
+  # 首次超时后的单次重试超时时间（秒）
+  retry_timeout: 60
   # 重试次数
   retry_count: 3
   # 代理失败时是否降级到直接API调用

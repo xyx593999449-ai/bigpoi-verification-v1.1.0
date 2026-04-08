@@ -8,6 +8,7 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../evidence-collection/scripts")))
 
+import call_internal_proxy
 from evidence_collection_common import new_generic_evidence_seed
 import websearch_adapter
 import internal_search_client
@@ -258,6 +259,52 @@ def test_internal_search_client_uses_protocol_params():
     assert "count=15" in captured["uri"]
     assert "time_range=7d" in captured["uri"]
     assert captured["timeout"] == 12
+
+
+def test_call_internal_proxy_retries_timeout_then_succeeds(monkeypatch):
+    calls = []
+
+    def fake_fetch(base_url, vendor, city, poi_name, timeout_seconds):
+        calls.append(timeout_seconds)
+        if len(calls) == 1:
+            raise TimeoutError("request timed out")
+        return {"pois": []}
+
+    monkeypatch.setattr(call_internal_proxy, "fetch_proxy_response", fake_fetch)
+
+    result = call_internal_proxy.fetch_proxy_response_with_retry(
+        "http://internal-proxy/mapapi",
+        "amap",
+        "深圳市",
+        "福保街道办事处",
+        10,
+        60,
+    )
+
+    assert result == {"pois": []}
+    assert calls == [10, 60]
+
+
+def test_call_internal_proxy_raises_after_second_timeout(monkeypatch):
+    calls = []
+
+    def fake_fetch(base_url, vendor, city, poi_name, timeout_seconds):
+        calls.append(timeout_seconds)
+        raise TimeoutError("request timed out")
+
+    monkeypatch.setattr(call_internal_proxy, "fetch_proxy_response", fake_fetch)
+
+    with pytest.raises(TimeoutError, match="timed out twice"):
+        call_internal_proxy.fetch_proxy_response_with_retry(
+            "http://internal-proxy/mapapi",
+            "bmap",
+            "深圳市",
+            "福保街道办事处",
+            10,
+            60,
+        )
+
+    assert calls == [10, 60]
 
 
 def test_websearch_empty_status_is_non_blocking(tmp_path: Path):
