@@ -8,38 +8,41 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../evidence-collection/scripts")))
 
+import run_evidence_collection
 import merge_evidence_collection_outputs
-from orchestrate_collection import collect_missing_vendors, run_json_command, should_fail_websearch_branch
-
-
-def test_collect_missing_vendors_from_internal_proxy_payload(tmp_path: Path):
-    payload = {
-        "vendors": {
-            "amap": {"items": [{"name": "A"}]},
-            "bmap": {"items": []},
-            "qmap": {"items": []},
-        }
-    }
-    path = tmp_path / "internal.json"
-    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    missing = collect_missing_vendors(path)
-    assert missing == ["bmap", "qmap"]
 
 
 def test_run_json_command_retries_and_succeeds():
     cmd = [sys.executable, "-c", "import json; print(json.dumps({'status':'ok'}))"]
-    result = run_json_command(cmd, label="smoke", retries=1)
+    result = run_evidence_collection.run_json_command(cmd, label="smoke", retries=1)
     assert result["status"] == "ok"
 
 
-def test_should_not_fail_when_websearch_is_empty():
-    assert should_fail_websearch_branch(1, {"status": "empty"}) is False
-    assert should_fail_websearch_branch(1, {"status": "partial"}) is False
-    assert should_fail_websearch_branch(1, {"status": "ok"}) is False
+def test_resolve_merge_paths_from_branches_supports_vendor_map():
+    web_branch = {
+        "websearch_merge_input_path": "/tmp/websearch-reviewed.json",
+        "webreader_merge_input_path": "/tmp/webreader-reviewed.json",
+    }
+    map_branch = {
+        "internal_proxy_merge_input_path": "/tmp/map-reviewed-internal.json",
+        "vendor_merge_input_paths": {
+            "amap": "/tmp/map-reviewed-fallback-amap.json",
+            "qmap": "/tmp/map-reviewed-fallback-qmap.json",
+        },
+    }
+    result = run_evidence_collection.resolve_merge_paths_from_branches(web_branch, map_branch)
+    assert result["internal_proxy_path"] == "/tmp/map-reviewed-internal.json"
+    assert result["vendor_paths"] == [
+        "/tmp/map-reviewed-fallback-amap.json",
+        "/tmp/map-reviewed-fallback-qmap.json",
+    ]
+    assert result["websearch_path"] == "/tmp/websearch-reviewed.json"
+    assert result["webreader_path"] == "/tmp/webreader-reviewed.json"
 
 
-def test_should_fail_when_websearch_is_error():
-    assert should_fail_websearch_branch(1, {"status": "error"}) is True
+def test_resolve_merge_paths_requires_internal_proxy():
+    with pytest.raises(ValueError, match="internal_proxy_merge_input_path is required"):
+        run_evidence_collection.resolve_merge_paths_from_branches({}, {})
 
 
 def test_merge_rejects_raw_websearch_payload(tmp_path: Path):

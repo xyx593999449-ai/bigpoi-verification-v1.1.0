@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.0.3] - 2026-04-08
+
+### Changed
+- 移除 Product 侧 `orchestrate_collection.py` 旧入口，证据收集正式主线统一到 `run_evidence_collection.py`，降低模型误走兼容链路的概率。
+
 ## [2.0.2] - 2026-04-08
 
 ### Changed

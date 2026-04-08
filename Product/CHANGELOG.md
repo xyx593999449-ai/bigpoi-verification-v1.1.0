@@ -1,5 +1,10 @@
 # Product CHANGELOG
 
+## [2.0.3] - 2026-04-08
+### Changed
+- 删除 `evidence-collection/scripts/orchestrate_collection.py` 旧兼容入口，正式收敛到 `run_evidence_collection.py` 唯一主入口，减少模型误判到过时链路。
+- 将对应测试从 `test_evidence_orchestrator.py` 重定向为 `test_run_evidence_collection.py`，改为覆盖当前正式入口的公共行为。
+
 ## [2.0.2] - 2026-04-08
 ### Changed
 - 修正 authority 分类行政层级口径：`街道办事处` 从 `130106` 调整为 `130105`（乡镇/街道同级），`130106` 保留为社区/行政村等乡镇以下级。
