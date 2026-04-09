@@ -124,6 +124,7 @@ web 分支补充约束（2026-04-08）：
 
 - 类型配置里的 `sources` 默认只参与 `search_queries` 生成，不再因为 URL 可访问就自动进入 `direct_read_sources`。
 - `direct_read_sources` 只保留显式允许直读的来源，例如输入 POI 自带官网，或后续明确加上 `allow_direct_read: true` 的来源。
+- `websearch_adapter.py` 以单条 `query` 为粒度执行 provider 回退；当 `baidu` 返回 `empty`、`timeout` 或 `error` 时，仅该条 query 会继续回退 `tavily`，不会把整批查询整体重跑。
 - `webreader` 的正式读取目标优先来自 `websearch-reviewed.json` 中被 review 保留的详情页 `read_url`，而不是门户首页。
 - `webreader-reviewed.json.status=empty` 表示“详情页已读取并完成 review，但没有形成可归并结果”，不等价于“没有执行到详情页”。
 - `web-branch-result.json` 会额外输出 `webreader_execution_state` 与 `attention_required`，用于区分“正常 empty”与“链路未执行完整”。

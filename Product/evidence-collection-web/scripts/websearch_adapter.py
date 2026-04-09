@@ -378,7 +378,7 @@ def execute_websearch_plan(
         attempt = baidu_result["attempt"]
         effective_provider = "baidu" if attempt["status"] == "ok" else None
         raw_items = baidu_result["items"] if effective_provider else []
-        if attempt["status"] in {"empty", "timeout"}:
+        if attempt["status"] in {"empty", "timeout", "error"}:
             fallback_indexes.append(index)
         query_states.append(
             {

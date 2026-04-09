@@ -157,6 +157,64 @@ def test_websearch_adapter_two_phase_parallel_fallback_scope(monkeypatch):
     assert attempts_by_query["q-timeout"][0]["status"] == "timeout"
 
 
+def test_websearch_adapter_fallback_from_baidu_error_to_tavily(monkeypatch):
+    calls = []
+
+    def fake_search_with_provider(
+        *,
+        base_url,
+        provider,
+        query,
+        domain=None,
+        block_domain=None,
+        count=None,
+        time_range=None,
+        timeout_seconds=30,
+    ):
+        calls.append((provider, query))
+        if provider == "baidu":
+            raise ValueError("Expecting value: line 1 column 1 (char 0)")
+        return {
+            "results": [
+                {
+                    "url": "https://www.example.gov.cn/a",
+                    "title": "某市人民政府",
+                    "content": "某市人民政府官网信息",
+                    "source": "某市人民政府",
+                }
+            ]
+        }
+
+    monkeypatch.setattr(websearch_adapter, "search_with_provider", fake_search_with_provider)
+    web_plan = {
+        "official_sources": [
+            {
+                "source_name": "政府官网",
+                "source_type": "official",
+                "source_url": "https://www.example.gov.cn/",
+                "query": "某市人民政府 官网",
+                "weight": 1.0,
+            }
+        ],
+        "internet_sources": [],
+    }
+
+    payload = websearch_adapter.execute_websearch_plan(
+        web_plan=web_plan,
+        base_url="http://internal-search/api",
+        default_count=20,
+        default_time_range="30d",
+        timeout_seconds=5,
+    )
+
+    assert calls == [("baidu", "某市人民政府 官网"), ("tavily", "某市人民政府 官网")]
+    assert payload["result_count"] == 1
+    assert payload["effective_provider"] == "tavily"
+    attempts = payload["provider_attempts"][0]["attempts"]
+    assert [attempt["provider"] for attempt in attempts] == ["baidu", "tavily"]
+    assert attempts[0]["status"] == "error"
+
+
 def test_internal_search_client_normalizes_baidu_minimal_fields():
     payload = load_fixture("baidu.json.txt")
     items = internal_search_client.normalize_search_items("baidu", payload)

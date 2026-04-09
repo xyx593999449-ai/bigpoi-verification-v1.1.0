@@ -1,5 +1,12 @@
 # Product CHANGELOG
 
+## [2.0.6] - 2026-04-09
+### Changed
+- `websearch_adapter.py` 调整 provider 回退条件：当单条 query 的 `baidu` 结果为 `error` 时，也会和 `empty`、`timeout` 一样继续按 query 维度回退到 `tavily`，避免代理返回非 JSON 等异常时整条 query 丢失补救机会。
+
+### Added
+- 新增回归测试覆盖 `baidu=error -> tavily fallback`，确保回退粒度保持为单条 query 而非整批重试。
+
 ## [2.0.5] - 2026-04-08
 ### Changed
 - `call_internal_proxy.py` 的图商内部代理默认超时策略调整为：首轮 10 秒，若命中超时则仅重试 1 次且第二轮超时为 60 秒。
